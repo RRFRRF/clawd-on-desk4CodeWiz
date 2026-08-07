@@ -17,6 +17,7 @@ codex-*.md
 CHANGELOG-draft.md
 docs/**
 !docs/guides/
+!docs/guides/fork-notice.md
 !docs/guides/copilot-setup.md
 !docs/guides/copilot-setup.zh-CN.md
 !docs/guides/guide-theme-creation.md

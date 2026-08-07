@@ -1,5 +1,26 @@
 # Notices
 
+## Upstream project
+
+This repository is a fork of
+[rullerzhou-afk/clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk),
+licensed under AGPL-3.0, copyright © 2026 Ruller_Lulu. That copyright is
+retained in full; fork modifications are copyright © 2026 RRFRRF and are
+released under the same AGPL-3.0 license.
+
+Changes made by this fork are listed in `docs/guides/fork-notice.md`, as
+required by AGPL-3.0 section 5(a).
+
+## CodeWiz brand assets
+
+`assets/source/agent-icons/codewiz.png` is the official CodeWiz product mark,
+taken from the Rednote CodeWiz VS Code extension (v1.10.8). It is used solely
+to identify the CodeWiz agent in this application's UI. It is recorded as a
+fallback source in `assets/source/agent-icons/source-manifest.json` because it
+has no public upstream package to pin.
+
+## Third-party materials
+
 This project includes third-party materials.
 
 ## Lobe Icons

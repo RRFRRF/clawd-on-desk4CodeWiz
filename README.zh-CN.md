@@ -12,13 +12,20 @@
   <a href="README.ja-JP.md">日本語</a>
 </p>
 <p align="center">
-  <a href="https://github.com/rullerzhou-afk/clawd-on-desk/releases"><img src="https://img.shields.io/github/v/release/rullerzhou-afk/clawd-on-desk" alt="Version"></a>
+  <a href="https://github.com/RRFRRF/clawd-on-desk4CodeWiz/releases"><img src="https://img.shields.io/github/v/release/RRFRRF/clawd-on-desk4CodeWiz" alt="Version"></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
 </p>
 <p align="center">
   <a href="https://github.com/rullerzhou-afk/clawd-on-desk/stargazers"><img src="https://img.shields.io/github/stars/rullerzhou-afk/clawd-on-desk?style=flat&logo=github&color=yellow" alt="Stars"></a>
   <a href="https://github.com/hesreallyhim/awesome-claude-code"><img src="https://awesome.re/mentioned-badge-flat.svg" alt="Mentioned in Awesome Claude Code"></a>
 </p>
+
+> [!NOTE]
+> **本仓库是一个 fork。** 上游项目：**[rullerzhou-afk/clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk)** —— Clawd 本身的全部功劳归属上游。
+>
+> 本 fork 新增 **CodeWiz CLI** 与 **Seal 桌面版** 支持，并使用独立的发布线（`0.14.100`+），应用内更新指向本仓库。许可证与上游一致，均为 AGPL-3.0，原作者版权声明完整保留。
+>
+> 完整改动清单与版本号规则：**[docs/guides/fork-notice.md](docs/guides/fork-notice.md)**
 
 <p align="center">
   <img src="assets/hero.gif" alt="Clawd 桌宠动画演示：像素螃蟹会随 AI 编程助手状态实时切换，在睡觉、思考、工具运行时打字、单个子代理时戴耳机律动、多个子代理并行时三球杂耍、权限请求弹出时提醒、任务完成后庆祝。支持 Claude Code、Codex、Cursor、Copilot、Gemini、Antigravity、Qwen、CodeWhale、Pi、OpenClaw 等。">

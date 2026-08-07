@@ -28,7 +28,12 @@ test("the current checkout satisfies the release version contract", () => {
   const result = verifyReleaseVersion({ root: path.join(__dirname, ".."), env: {} });
   assert.deepStrictEqual(result.errors, []);
   assert.strictEqual(result.ok, true);
-  assert.strictEqual(result.version, "0.14.0");
+  // Read the expected version from package.json rather than hardcoding it:
+  // this fork ships its own version line (see docs/guides/fork-notice.md), and
+  // a literal here would have to be edited on every release for no benefit.
+  // The contract being tested is that package/lock/release-note agree, which
+  // verifyReleaseVersion already enforces above.
+  assert.strictEqual(result.version, require("../package.json").version);
 });
 
 test("package, lock root, release note, and tag must agree exactly", (t) => {

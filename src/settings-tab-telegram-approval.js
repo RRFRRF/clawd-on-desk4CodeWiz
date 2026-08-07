@@ -657,7 +657,7 @@
     guide.textContent = t("telegramNativeMigrationGuide");
     guide.addEventListener("click", () => {
       helpers.openExternalSafe(
-        "https://github.com/rullerzhou-afk/clawd-on-desk/blob/main/docs/guides/telegram-approval.md"
+        "https://github.com/RRFRRF/clawd-on-desk4CodeWiz/blob/main/docs/guides/telegram-approval.md"
       );
     });
     actions.appendChild(verify);

@@ -756,9 +756,13 @@ test("settings IPC serves agent/about/update/external and remove-theme dialog he
     ]);
     assert.deepStrictEqual(await ipcMain.invoke("settings:get-about-info"), {
       version: "1.2.3",
-      repoUrl: "https://github.com/rullerzhou-afk/clawd-on-desk",
+      repoUrl: "https://github.com/RRFRRF/clawd-on-desk4CodeWiz",
+      // Upstream attribution must survive in the shipped About payload:
+      // AGPL-3.0 redistribution requires it, so this assertion is a guard,
+      // not boilerplate (see docs/guides/fork-notice.md).
+      upstreamRepoUrl: "https://github.com/rullerzhou-afk/clawd-on-desk",
       license: "AGPL-3.0",
-      copyright: "\u00a9 2026 Ruller_Lulu",
+      copyright: "\u00a9 2026 Ruller_Lulu \u00b7 fork modifications \u00a9 2026 RRFRRF",
       authorName: "Ruller_Lulu / \u9e7f\u9e7f",
       authorUrl: "https://github.com/rullerzhou-afk",
       heroSvgContent: "<svg id=\"hero\"></svg>",

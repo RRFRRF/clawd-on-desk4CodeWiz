@@ -1,5 +1,13 @@
 # AGENTS.md
 
+> **Fork notice.** This repository is a fork of
+> [rullerzhou-afk/clawd-on-desk](https://github.com/rullerzhou-afk/clawd-on-desk)
+> (AGPL-3.0, © 2026 Ruller_Lulu). It adds CodeWiz CLI and Seal Desktop support
+> and ships its own release line starting at `0.14.100`. Before changing
+> version numbers, update sources, or the About page attribution, read
+> `docs/guides/fork-notice.md` — those four surfaces are fork-specific and must
+> not be reverted to upstream values when merging upstream changes.
+
 This file is the entry point for coding agents working in this repository. Keep it short and operational. Deep background lives in `docs/project/`.
 
 ## Project Overview

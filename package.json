@@ -1,6 +1,6 @@
 {
   "name": "clawd-on-desk",
-  "version": "0.14.0",
+  "version": "0.14.100",
   "description": "A desktop pet that reacts to your Claude Code sessions in real-time.",
   "main": "src/main.js",
   "scripts": {
@@ -71,6 +71,7 @@
   "build": {
     "appId": "com.clawd.on-desk",
     "productName": "Clawd on Desk",
+    "copyright": "Copyright \u00a9 2026 Ruller_Lulu; fork modifications \u00a9 2026 RRFRRF",
     "protocols": [
       {
         "name": "Clawd Import Protocol",
@@ -110,7 +111,7 @@
       ]
     },
     "linux": {
-      "maintainer": "rullerzhou-afk <rullerzhou-afk@users.noreply.github.com>",
+      "maintainer": "RRFRRF <RRFRRF@users.noreply.github.com>",
       "icon": "assets/icons",
       "category": "Utility",
       "artifactName": "Clawd-on-Desk-${version}-${arch}.${ext}",
@@ -173,8 +174,8 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "rullerzhou-afk",
-        "repo": "clawd-on-desk"
+        "owner": "RRFRRF",
+        "repo": "clawd-on-desk4CodeWiz"
       }
     ]
   },

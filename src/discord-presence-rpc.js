@@ -12,7 +12,7 @@ const OP = Object.freeze({ HANDSHAKE: 0, FRAME: 1, CLOSE: 2, PING: 3, PONG: 4 })
 
 // Legacy image used by the original coarse Presence opt-in. Keep this path
 // byte-for-byte stable unless the separate animation-mirror opt-in is enabled.
-const CLAWD_ICON_URL = "https://raw.githubusercontent.com/rullerzhou-afk/clawd-on-desk/main/assets/icon.png";
+const CLAWD_ICON_URL = "https://raw.githubusercontent.com/RRFRRF/clawd-on-desk4CodeWiz/main/assets/icon.png";
 
 // External GIF URLs animate in large_image (uploaded portal assets can't), so the
 // presence mirrors the live clawd sprite without anyone uploading art. These are the
@@ -20,7 +20,7 @@ const CLAWD_ICON_URL = "https://raw.githubusercontent.com/rullerzhou-afk/clawd-o
 // that fill the card instead of floating tiny in the source canvas. Served from a branch
 // ref like CLAWD_ICON_URL so the link outlives any fork or feature branch; Discord's
 // media proxy may cache stale bytes for a while after a sprite is regenerated.
-const GIF_BASE_URL = "https://raw.githubusercontent.com/rullerzhou-afk/clawd-on-desk/main/assets/discord-presence";
+const GIF_BASE_URL = "https://raw.githubusercontent.com/RRFRRF/clawd-on-desk4CodeWiz/main/assets/discord-presence";
 
 // Clawd sprite per resolved image fallback state (see resolvePresenceState).
 // Mirror fallback path: used when no on-screen visual is known yet (bridge just

@@ -107,7 +107,7 @@
   // cache; the dynamic ones must be re-fetched on every render so the
   // pending hint and the auto-update toggle reflect current state after
   // the user flips the toggle or the scheduler discovers a new version.
-  const STATIC_ABOUT_KEYS = ["repoUrl", "license", "copyright", "authorName", "authorUrl", "heroSvgContent"];
+  const STATIC_ABOUT_KEYS = ["repoUrl", "upstreamRepoUrl", "license", "copyright", "authorName", "authorUrl", "heroSvgContent"];
   function fetchAboutInfo() {
     if (!window.settingsAPI || typeof window.settingsAPI.getAboutInfo !== "function") {
       return Promise.resolve(runtime.about.infoCache || null);
@@ -513,6 +513,16 @@
           t("aboutRepositoryLabel"),
           safe.repoUrl,
           safe.repoUrl.replace(/^https?:\/\//, "")
+        ));
+      }
+
+      // Upstream attribution is not optional decoration: AGPL-3.0 redistribution
+      // requires the original project to stay credited in the shipped UI.
+      if (safe.upstreamRepoUrl) {
+        infoSection.appendChild(buildAboutLinkRow(
+          t("aboutUpstreamLabel"),
+          safe.upstreamRepoUrl,
+          safe.upstreamRepoUrl.replace(/^https?:\/\//, "")
         ));
       }
 

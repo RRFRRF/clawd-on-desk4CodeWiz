@@ -568,9 +568,13 @@ function registerSettingsIpc(options = {}) {
     } catch {}
     return {
       version: app.getVersion(),
-      repoUrl: "https://github.com/rullerzhou-afk/clawd-on-desk",
+      // This build is a fork. AGPL-3.0 requires the original copyright and
+      // author attribution to survive redistribution, so upstream stays
+      // visible alongside the fork rather than being replaced by it.
+      repoUrl: "https://github.com/RRFRRF/clawd-on-desk4CodeWiz",
+      upstreamRepoUrl: "https://github.com/rullerzhou-afk/clawd-on-desk",
       license: "AGPL-3.0",
-      copyright: "\u00a9 2026 Ruller_Lulu",
+      copyright: "\u00a9 2026 Ruller_Lulu \u00b7 fork modifications \u00a9 2026 RRFRRF",
       authorName: "Ruller_Lulu / \u9e7f\u9e7f",
       authorUrl: "https://github.com/rullerzhou-afk",
       heroSvgContent,
