@@ -153,20 +153,33 @@ Clawd adapts to multi-monitor setups: proportional sizing uses the display Clawd
 
 ## Quick Start
 
-For normal use, download the latest prebuilt installer from **[GitHub Releases](https://github.com/rullerzhou-afk/clawd-on-desk/releases/latest)**:
+For normal use, download the latest prebuilt installer from **[this fork's GitHub Releases](https://github.com/RRFRRF/clawd-on-desk4CodeWiz/releases/latest)** — that page carries the CodeWiz build, not upstream's.
 
-- **Windows**: `Clawd-on-Desk-Setup-<version>-x64.exe` or `Clawd-on-Desk-Setup-<version>-arm64.exe`
-- **macOS**: `.dmg`
-- **Linux**: `.AppImage` or `.deb`
+- **Windows**: `Clawd-on-Desk-Setup-<version>-x64.exe` or `Clawd-on-Desk-Setup-<version>-arm64.exe`. SmartScreen may warn on the first run — choose **More info → Run anyway**.
+- **macOS**: `Clawd-on-Desk-<version>-arm64.dmg` (Apple Silicon) or `Clawd-on-Desk-<version>-x64.dmg` (Intel). **This build is unsigned, so you must clear the quarantine flag after installing or macOS will report the app as "damaged"** (see below).
+- **Linux**: `.AppImage` or `.deb`.
 
-Launch Clawd after installing it. Fresh installs auto-sync Claude Code and Codex only; install other local agent integrations from **Settings → Agents** when you need them.
+### macOS: the "damaged" workaround (required)
+
+The macOS build is not signed or notarized, so Gatekeeper quarantines it on
+first launch and reports **"Clawd on Desk is damaged and can't be opened"**.
+The app is fine — this is just the missing signature. Remove the quarantine
+attribute once, right after dragging the app into `/Applications`:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Clawd on Desk.app"
+```
+
+The app then opens normally. Skip this step and macOS will refuse to launch it.
+
+Launch Clawd after installing it. Fresh installs auto-sync Claude Code and Codex only; install other local agent integrations (including **CodeWiz**) from **Settings → Agents** when you need them.
 
 Run from source only if you're contributing, testing unreleased code, or debugging integrations. Source installs download Electron/build tooling and can create a large `node_modules` tree.
 
 ```bash
 # Clone the repo
-git clone https://github.com/rullerzhou-afk/clawd-on-desk.git
-cd clawd-on-desk
+git clone https://github.com/RRFRRF/clawd-on-desk4CodeWiz.git
+cd clawd-on-desk4CodeWiz
 
 # Install dependencies
 npm install

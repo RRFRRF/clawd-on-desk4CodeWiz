@@ -13,10 +13,11 @@ required by AGPL-3.0 section 5(a).
 
 ## CodeWiz brand assets
 
-`assets/source/agent-icons/codewiz.png` is the official CodeWiz product mark.
-It is used solely to identify the CodeWiz agent in this application's UI. It is
-recorded as a fallback source in `assets/source/agent-icons/source-manifest.json`
-because it has no public upstream package to pin.
+`assets/source/agent-icons/codewiz.png` is the official CodeWiz product mark,
+taken from the Rednote CodeWiz VS Code extension (v1.10.8). It is used solely
+to identify the CodeWiz agent in this application's UI. It is recorded as a
+fallback source in `assets/source/agent-icons/source-manifest.json` because it
+has no public upstream package to pin.
 
 ## Third-party materials
 

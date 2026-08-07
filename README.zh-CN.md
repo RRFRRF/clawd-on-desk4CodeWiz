@@ -149,20 +149,32 @@ Clawd 适配多显示器场景：按启动时所在显示器做等比缩放，�
 
 ## 快速开始
 
-普通用户建议直接从 **[GitHub Releases](https://github.com/rullerzhou-afk/clawd-on-desk/releases/latest)** 下载最新预构建安装包：
+普通用户建议直接从 **[本 fork 的 GitHub Releases](https://github.com/RRFRRF/clawd-on-desk4CodeWiz/releases/latest)** 下载最新预构建安装包——这里才是带 CodeWiz 支持的构建，不是上游页面。
 
-- **Windows**：`Clawd-on-Desk-Setup-<version>-x64.exe` 或 `Clawd-on-Desk-Setup-<version>-arm64.exe`
-- **macOS**：`.dmg`
-- **Linux**：`.AppImage` 或 `.deb`
+- **Windows**：`Clawd-on-Desk-Setup-<version>-x64.exe` 或 `Clawd-on-Desk-Setup-<version>-arm64.exe`。首次运行 SmartScreen 可能提示未知发布者——选择 **仍要运行**。
+- **macOS**：`Clawd-on-Desk-<version>-arm64.dmg`（Apple 芯片）或 `Clawd-on-Desk-<version>-x64.dmg`（Intel）。**这个包没有签名，装完必须先跑下面那条命令，否则 macOS 会报「已损坏」**。
+- **Linux**：`.AppImage` 或 `.deb`。
 
-安装后启动 Clawd。全新安装只会自动同步 Claude Code 和 Codex；其他本机 agent 需要用到时，再到 **Settings → Agents** 安装对应集成。
+### macOS：必须先跑这条命令（否则会报「已损坏」）
+
+macOS 包没有做签名 / 公证，Gatekeeper 会在首次打开时把它隔离，提示
+**「Clawd on Desk 已损坏，无法打开」**。包本身没坏，只是缺签名。把 app 拖进
+`/Applications` 之后，先跑一次：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Clawd on Desk.app"
+```
+
+之后就能正常打开了。不跑这条命令 macOS 会一直拒绝启动。
+
+安装后启动 Clawd。全新安装只会自动同步 Claude Code 和 Codex；其他本机 agent（包括 **CodeWiz**）需要用到时，再到 **Settings → Agents** 安装对应集成。
 
 只有在参与开发、测试未发布代码或调试集成时，才建议从源码运行。源码安装会下载 Electron / 打包工具，并生成较大的 `node_modules`。
 
 ```bash
 # 克隆仓库
-git clone https://github.com/rullerzhou-afk/clawd-on-desk.git
-cd clawd-on-desk
+git clone https://github.com/RRFRRF/clawd-on-desk4CodeWiz.git
+cd clawd-on-desk4CodeWiz
 
 # 安装依赖
 npm install
