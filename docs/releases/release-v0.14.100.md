@@ -56,6 +56,26 @@ change list and the versioning scheme.
 - **The About page credits upstream alongside this fork**, and the original
   copyright is retained, as AGPL-3.0 requires.
 
+### Installation
+
+**macOS: unsigned build.** This release is not code-signed or notarized. When
+you open the `.dmg` and drag the app to `/Applications`, Gatekeeper may report
+the app as "damaged and can't be opened". That is the quarantine attribute, not
+a corrupted download. Remove it once after installing:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Clawd on Desk.app"
+```
+
+The app then launches normally. (Signing and notarization require an Apple
+Developer account and are not set up yet.)
+
+**Windows:** run the `x64` or `ARM64` installer matching your machine. SmartScreen
+may show an "unrecognized app" prompt on the first run — choose **More info → Run
+anyway**.
+
+**Linux:** use the package matching your distribution.
+
 ### Known Limitations
 
 - On some macOS builds, certain processes are invisible to `pgrep`, which can
