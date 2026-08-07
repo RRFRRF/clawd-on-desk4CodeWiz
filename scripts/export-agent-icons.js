@@ -56,10 +56,9 @@ const SOURCE_PROVENANCE = Object.freeze({
   "claude-code": lobeSource("claudecode-color.png"),
   codebuddy: lobeSource("codebuddy-color.png"),
   codewhale: { originalFilename: "codewhale.png", fallback: true },
-  // CodeWiz is an internal Xiaohongshu tool with no LobeHub icon. The
-  // source is the official brand mark shipped inside the Rednote CodeWiz
-  // VS Code extension (v1.10.8), recorded as a fallback source because it
-  // has no public upstream package to pin.
+  // CodeWiz is an opencode-derived vendor CLI with no public icon package,
+  // so its brand mark ships as a fallback source rather than a pinned
+  // upstream dependency.
   codewiz: { originalFilename: "codewiz-logo-new.png", fallback: true },
   codex: lobeSource("openai.png", { contrastTreatment: "neutral-light-tile" }),
   "copilot-cli": lobeSource("githubcopilot.png", { contrastTreatment: "neutral-light-tile" }),
