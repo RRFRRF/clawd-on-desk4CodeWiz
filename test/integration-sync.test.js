@@ -71,6 +71,7 @@ function makeRuntime(overrides = {}) {
     },
     syncOpencodePluginImpl: () => calls.push({ name: "opencode" }),
     syncMimocodePluginImpl: () => calls.push({ name: "mimocode" }),
+    syncCodewizPluginImpl: () => calls.push({ name: "codewiz" }),
     syncPiExtensionImpl: () => calls.push({ name: "pi" }),
     syncOpenClawPluginImpl: () => calls.push({ name: "openclaw" }),
     repairOpenClawPluginImpl: () => {
@@ -280,6 +281,7 @@ describe("integration sync runtime", () => {
       "codewhale",
       "codex",
       "mimocode",
+      "codewiz",
       "pi",
       "openclaw",
       "hermes",
@@ -312,6 +314,7 @@ describe("integration sync runtime", () => {
       "codex",
       "opencode",
       "mimocode",
+      "codewiz",
       "openclaw",
       "hermes",
       "qoder",

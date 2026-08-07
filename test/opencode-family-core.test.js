@@ -271,7 +271,7 @@ describe("opencode-family Windows GUI host focus identity", () => {
 });
 
 describe("opencode-family session-id helpers (prefix matrix)", () => {
-  for (const prefix of ["opencode:", "mimocode:"]) {
+  for (const prefix of ["opencode:", "mimocode:", "codewiz:"]) {
     it(`${prefix} raw + prefixed child lookup, deleted removes one, disposed clears all`, async () => {
       const { createSessionIdHelpers } = await loadSessionIds();
       const ids = createSessionIdHelpers(prefix);

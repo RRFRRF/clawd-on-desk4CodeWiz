@@ -18,6 +18,7 @@ const zcode = require("../../hooks/zcode-install");
 const codewhale = require("../../hooks/codewhale-install");
 const opencode = require("../../hooks/opencode-install");
 const mimocode = require("../../hooks/mimocode-install");
+const codewiz = require("../../hooks/codewiz-install");
 const pi = require("../../hooks/pi-install");
 const openclaw = require("../../hooks/openclaw-install");
 const hermes = require("../../hooks/hermes-install");
@@ -263,6 +264,30 @@ const AGENT_DESCRIPTORS = Object.freeze([
     // match, so a drifted literal would report a healthy install as
     // not-connected (R8 P2).
     marker: getFamilyConfig("mimocode").pluginDirName,
+    detection: "opencode-plugin",
+  }),
+  Object.freeze({
+    agentId: "codewiz",
+    agentName: agentName("codewiz"),
+    eventSource: agentEventSource("codewiz"),
+    parentDir: codewiz.DEFAULT_PARENT_DIR,
+    configPath: codewiz.DEFAULT_CONFIG_PATH,
+    configMode: "file",
+    autoInstall: true,
+    // CodeWiz is an opencode-family member and shares the same plugin loader
+    // contract. Detection reuses the opencode-plugin validator path;
+    // configJsonc routes reads through the JSONC parser so a commented config
+    // is not misreported as config-corrupt, and configCandidates
+    // (highest-priority first, from the family registry) makes the doctor
+    // validate the MERGED effective plugin view rather than one fixed file.
+    configJsonc: true,
+    configCandidates: Object.freeze(
+      getFamilyConfig("codewiz").configCandidates.map((name) => path.join(codewiz.DEFAULT_PARENT_DIR, name))
+    ),
+    // marker derives from the registry: it feeds the plugin-entry basename
+    // match, so a drifted literal would report a healthy install as
+    // not-connected.
+    marker: getFamilyConfig("codewiz").pluginDirName,
     detection: "opencode-plugin",
   }),
   Object.freeze({

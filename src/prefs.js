@@ -362,6 +362,12 @@ const SCHEMA = {
       "codewhale": { integrationInstalled: false, enabled: false, permissionsEnabled: false, notificationHookEnabled: true },
       "opencode": { integrationInstalled: false, enabled: false, permissionsEnabled: true, notificationHookEnabled: true },
       "mimocode": { integrationInstalled: false, enabled: false, permissionsEnabled: true, notificationHookEnabled: true },
+      // CodeWiz ships with permissionsEnabled FALSE (unlike the other family
+      // members). The shared family permission path is code-complete, but the
+      // reverse Bun.serve bridge is not yet verified inside CodeWiz's plugin
+      // sandbox. Enabling approval before that check risks stranding the user
+      // on a bubble nobody can answer; Phase C flips this after the probe.
+      "codewiz": { integrationInstalled: false, enabled: false, permissionsEnabled: false, notificationHookEnabled: true },
       "pi": { integrationInstalled: false, enabled: false, permissionsEnabled: false, notificationHookEnabled: true },
       "openclaw": { integrationInstalled: false, enabled: false, permissionsEnabled: false, notificationHookEnabled: true },
       "hermes": { integrationInstalled: false, enabled: false, permissionsEnabled: true, notificationHookEnabled: true },

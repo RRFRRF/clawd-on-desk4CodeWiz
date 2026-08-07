@@ -2430,6 +2430,14 @@ function detectRunningAgentProcesses(callback) {
     // Current ZCode runtimes use resources/glm/zcode.cjs app-server; only the
     // cmdline token disambiguates the working process from the GUI shell.
     { agentId: "zcode", needle: "zcode.cjs", processName: "zcode.exe" },
+    // CodeWiz ships as npm @xhs/codewiz whose platform binary is named
+    // "opencode" (@xhs/codewiz-darwin-arm64/bin/opencode). Matching by name
+    // would cross-fire with real opencode, so the package path is the only
+    // safe discriminator. It covers both the node wrapper
+    // (.../@xhs/codewiz/bin/codewiz) and the platform binary. Like every
+    // needle here this is a keep-awake fallback only: it never creates a
+    // session or publishes a task-level state.
+    { agentId: "codewiz", needle: "@xhs/codewiz" },
   ].filter((entry) => isEnabled(entry.agentId));
   const platformCommandLineNeedles = process.platform === "win32" || !isEnabled("pi")
     ? commandLineNeedles

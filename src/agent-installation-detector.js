@@ -377,6 +377,7 @@ function detectInstallation(descriptor, paths, options) {
     case "codewhale":
     case "opencode":
     case "mimocode":
+    case "codewiz":
     case "qoder":
     case "qoderwork":
       if (dirExists(fsImpl, paths.parentDir)) return installationResult(true, "high", "parent-dir", `${paths.parentDir} exists`);

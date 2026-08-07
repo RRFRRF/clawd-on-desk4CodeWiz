@@ -53,6 +53,34 @@ const OPENCODE_FAMILY = Object.freeze({
     jsonc: true,
     schema: "https://mimo.xiaomi.com/mimocode/config.json",
   }),
+  // CodeWiz — an opencode-derived CLI distributed as npm @xhs/codewiz with
+  // platform binaries @xhs/codewiz-<platform> whose executable is literally
+  // named "opencode". Verified against v0.1.93: same plugin loader
+  // (await import(await Bun.resolve(spec, dir))), same @opencode-ai/plugin
+  // SDK surface, same session.* / message.part.updated / permission.asked
+  // wire contract.
+  //
+  // Like MiMo, the global config is a MERGE of three files — config.json →
+  // codewiz.json → codewiz.jsonc, later wins — and array fields like "plugin"
+  // are REPLACED by the later file, not concatenated. configCandidates lists
+  // them highest-priority first so the installer edits the file whose "plugin"
+  // actually wins and uninstall sweeps ALL of them.
+  //
+  // schema is opencode.ai's URL because CodeWiz itself stamps exactly that
+  // into configs it creates (verified in the v0.1.93 binary); cfg.schema is
+  // only used when creating a brand-new config file.
+  codewiz: Object.freeze({
+    displayName: "CodeWiz",
+    sessionIdPrefix: "codewiz:",
+    hookSource: "codewiz-plugin",
+    pluginDirName: "codewiz-plugin",
+    logFileName: "codewiz-plugin.log",
+    configDirSegments: Object.freeze([".config", "codewiz"]),
+    configFileName: "codewiz.jsonc",
+    configCandidates: Object.freeze(["codewiz.jsonc", "codewiz.json", "config.json"]),
+    jsonc: true,
+    schema: "https://opencode.ai/config.json",
+  }),
 });
 
 // Clawd-internal event names (PascalCase) shared by every family member —

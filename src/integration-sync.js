@@ -395,6 +395,24 @@ function createIntegrationSyncRuntime(options = {}) {
     }
   }
 
+  function syncCodewizPlugin() {
+    try {
+      if (typeof ctx.syncCodewizPluginImpl === "function") return ctx.syncCodewizPluginImpl();
+      const { registerCodewizPlugin } = require("../hooks/codewiz-install.js");
+      const result = registerCodewizPlugin({ silent: true });
+      if (result.added || result.created) {
+        console.log(`Clawd: synced codewiz plugin (added=${result.added}, created=${result.created})`);
+      }
+      if (result && result.reason === "codewiz-not-found") {
+        return asSkipped(result, "codewiz-not-found", "codewiz is not installed; skipped plugin sync");
+      }
+      return asOk(result);
+    } catch (err) {
+      console.warn("Clawd: failed to sync codewiz plugin:", err.message);
+      return { status: "error", message: err && err.message ? err.message : "Failed to sync codewiz plugin" };
+    }
+  }
+
   function syncPiExtension() {
     try {
       if (typeof ctx.syncPiExtensionImpl === "function") return ctx.syncPiExtensionImpl();
@@ -547,6 +565,7 @@ function createIntegrationSyncRuntime(options = {}) {
     codex: syncCodexHooks,
     opencode: syncOpencodePlugin,
     mimocode: syncMimocodePlugin,
+    codewiz: syncCodewizPlugin,
     pi: syncPiExtension,
     openclaw: syncOpenClawPlugin,
     hermes: syncHermesPlugin,
@@ -692,6 +711,7 @@ function createIntegrationSyncRuntime(options = {}) {
     syncCodexHooks,
     syncOpencodePlugin,
     syncMimocodePlugin,
+    syncCodewizPlugin,
     syncPiExtension,
     syncOpenClawPlugin,
     syncHermesPlugin,

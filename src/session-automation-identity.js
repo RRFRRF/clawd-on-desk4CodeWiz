@@ -36,6 +36,11 @@ const ADAPTER_POLICY = Object.freeze({
     reason: "permission-session-association-not-authoritative",
     placeholders: Object.freeze(["default", "mimocode:", "mimocode:default"]),
   }),
+  codewiz: Object.freeze({
+    eligible: false,
+    reason: "permission-session-association-not-authoritative",
+    placeholders: Object.freeze(["default", "codewiz:", "codewiz:default"]),
+  }),
   codex: Object.freeze({
     // Conditional, not blanket eligibility. Only the local, process-bound TUI
     // identity audited below may pass. Codex Desktop/app-server, remote and

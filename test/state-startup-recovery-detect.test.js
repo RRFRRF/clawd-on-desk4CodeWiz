@@ -1,5 +1,6 @@
 const { describe, it, beforeEach, afterEach } = require("node:test");
 const assert = require("node:assert");
+const fs = require("node:fs");
 const path = require("path");
 const childProcess = require("child_process");
 const themeLoader = require("../src/theme-loader");
@@ -95,13 +96,16 @@ describe("detectRunningAgentProcesses() agent coverage", () => {
     assert.doesNotMatch(seenScript, /Win32_Process \| Where-Object/);
     assert.match(
       seenScript,
-      /\$nodeNeedles = @\('claude-code','codex','copilot','codebuddy','kimi-code','zcode\.cjs'\)/
+      /\$nodeNeedles = @\('claude-code','codex','copilot','codebuddy','kimi-code','zcode\.cjs','@xhs\/codewiz'\)/
     );
+    // CodeWiz's platform binary is named "opencode", so it must never appear
+    // in the exact-name roster — the package-path needle is its only match.
+    assert.doesNotMatch(seenScript, /'codewiz\.exe'/);
     // zcode.cjs is matched against the ZCode.exe desktop shell (not node.exe),
     // so the per-needle host-name array carries zcode.exe in the same position.
     assert.match(
       seenScript,
-      /\$nodeNeedleNames = @\('node\.exe','node\.exe','node\.exe','node\.exe','node\.exe','zcode\.exe'\)/
+      /\$nodeNeedleNames = @\('node\.exe','node\.exe','node\.exe','node\.exe','node\.exe','zcode\.exe','node\.exe'\)/
     );
   });
 
@@ -238,5 +242,18 @@ describe("detectRunningAgentProcesses() agent coverage", () => {
 
     assert.strictEqual(found, false);
     assert.strictEqual(calls, 0);
+  });
+
+  it("matches codewiz only by package path, never by process name", () => {
+    // CodeWiz's platform binary is literally named "opencode"
+    // (@xhs/codewiz-darwin-arm64/bin/opencode), so any name-based entry would
+    // make CodeWiz and real opencode detect each other. The agent therefore
+    // declares an empty process surface and relies on the cmdline needle.
+    const codewiz = require("../agents/codewiz.js");
+    assert.deepStrictEqual(codewiz.processNames, { win: [], mac: [], linux: [] });
+    assert.deepStrictEqual(codewiz.startupRecoveryProcessNames, { win: [], mac: [], linux: [] });
+
+    const source = fs.readFileSync(path.join(__dirname, "..", "src", "state.js"), "utf8");
+    assert.match(source, /\{ agentId: "codewiz", needle: "@xhs\/codewiz" \}/);
   });
 });

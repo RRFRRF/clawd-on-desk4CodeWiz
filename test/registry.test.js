@@ -21,6 +21,7 @@ describe("Agent Registry", () => {
       "codewhale",
       "opencode",
       "mimocode",
+      "codewiz",
       "pi",
       "openclaw",
       "hermes",
@@ -205,6 +206,11 @@ describe("Agent Registry", () => {
     assert.ok(!startupAgentIds.has("cursor-agent"));
     assert.ok(!startupAgentIds.has("qoderwork"));
     assert.ok(!startupAgentIds.has("workbuddy"));
+    // CodeWiz deliberately ships NO process names: its platform binary is
+    // literally named "opencode" (@xhs/codewiz-<platform>/bin/opencode), so a
+    // name-based startup-recovery entry would cross-fire with real opencode.
+    // Liveness goes through the commandLineNeedles path in state.js instead.
+    assert.ok(!startupAgentIds.has("codewiz"));
 
     // ZCode keeps only the unambiguous legacy `zcode-cli` in pure-name startup
     // recovery. Current macOS/Windows Electron Node-mode runtimes are matched

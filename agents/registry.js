@@ -15,6 +15,7 @@ const zcode = require("./zcode");
 const codewhale = require("./codewhale");
 const opencode = require("./opencode");
 const mimocode = require("./mimocode");
+const codewiz = require("./codewiz");
 const pi = require("./pi");
 const openclaw = require("./openclaw");
 const hermes = require("./hermes");
@@ -38,6 +39,7 @@ const AGENTS = [
   codewhale,
   opencode,
   mimocode,
+  codewiz,
   pi,
   openclaw,
   hermes,

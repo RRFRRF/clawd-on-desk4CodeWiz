@@ -316,6 +316,14 @@
       "variant": "light",
       "contrastTreatment": "neutral-light-tile"
     },
+    "codewiz": {
+      "agentId": "codewiz",
+      "originalFilename": "codewiz-logo-new.png",
+      "sourceFilename": "codewiz.png",
+      "sourceType": "png",
+      "sha256": "8f02815de7a908519a1f15070a33afbfdb864cbb8bb93c4d23e3cacecb8b9279",
+      "fallback": true
+    },
     "pi": {
       "agentId": "pi",
       "originalFilename": "pi.png",
@@ -485,6 +493,12 @@
       "outputFilename": "mimocode.png",
       "outputSha256": "01dce8bc538095fd33fb04195b13612bdee3fa60398f35747a4bd5e6bba73dc1",
       "generatedFromSourceSha256": "04f78ad5b2ebd628ddaa59261c3696971dc54799c1ae3401454977810ca1f63b"
+    },
+    "codewiz": {
+      "agentId": "codewiz",
+      "outputFilename": "codewiz.png",
+      "outputSha256": "de03b825d118d4ab6753cfa87dd724b0664fbfa7f0df295170214497dd842579",
+      "generatedFromSourceSha256": "8f02815de7a908519a1f15070a33afbfdb864cbb8bb93c4d23e3cacecb8b9279"
     },
     "pi": {
       "agentId": "pi",
