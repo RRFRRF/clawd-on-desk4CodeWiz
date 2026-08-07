@@ -4,7 +4,7 @@ This file is the entry point for coding agents working in this repository. Keep 
 
 ## Project Overview
 
-Clawd 是一个 Electron 桌宠：通过 hook、日志轮询、plugin 和 extension 感知 AI coding agent 的工作状态，并播放像素风动画。当前支持 Claude Code、Codex CLI、Copilot CLI、Gemini CLI、Antigravity CLI (agy)、Cursor Agent、CodeBuddy、WorkBuddy、Kiro CLI、Kimi Code CLI (Kimi-CLI)、Qwen Code、ZCode、CodeWhale、opencode、MiMo Code、Pi、OpenClaw、Hermes Agent、Qoder、QoderWork、Reasonix；内置 Clawd / Calico / Cloudling 三套主题，支持用户主题；平台覆盖 Windows、macOS、Linux，UI 支持 en / zh / ko / ja。
+Clawd 是一个 Electron 桌宠：通过 hook、日志轮询、plugin 和 extension 感知 AI coding agent 的工作状态，并播放像素风动画。当前支持 Claude Code、Codex CLI、Copilot CLI、Gemini CLI、Antigravity CLI (agy)、Cursor Agent、CodeBuddy、WorkBuddy、Kiro CLI、Kimi Code CLI (Kimi-CLI)、Qwen Code、ZCode、CodeWhale、opencode、MiMo Code、CodeWiz、Pi、OpenClaw、Hermes Agent、Qoder、QoderWork、Reasonix；内置 Clawd / Calico / Cloudling 三套主题，支持用户主题；平台覆盖 Windows、macOS、Linux，UI 支持 en / zh / ko / ja。
 
 ## Common Commands
 
@@ -63,7 +63,7 @@ bash test-macos.sh
 bash test-oneshot-gate.sh [state] [seconds]
 ```
 
-新安装默认只把 Claude Code 和 Codex 标记为已安装并启用；其他 agent 默认未安装、未启用。正常启动时，Clawd 只会为 `integrationInstalled=true` 且 `enabled=true` 的 agent 自动同步 Claude / Codex / Copilot / Gemini / Antigravity / Cursor / CodeBuddy / WorkBuddy / Kiro / Kimi / Qwen / ZCode / CodeWhale / Qoder / QoderWork / Reasonix hooks、opencode / MiMo Code / OpenClaw / Hermes plugins 和 Pi extension。Settings Agent 页的 Install 会安装并启用该集成；Uninstall 会卸载 Clawd 管理的 hook/plugin/extension，并同时把该 agent 设为未安装、未启用。单独关闭 enabled 只会跳过启动同步并屏蔽事件/权限入口，不卸载用户已有 hooks / plugins / extensions；重新启用未安装 agent 只打开事件入口，不会写本机集成文件。手动安装命令主要用于调试、重装或远程部署。
+新安装默认只把 Claude Code 和 Codex 标记为已安装并启用；其他 agent 默认未安装、未启用。正常启动时，Clawd 只会为 `integrationInstalled=true` 且 `enabled=true` 的 agent 自动同步 Claude / Codex / Copilot / Gemini / Antigravity / Cursor / CodeBuddy / WorkBuddy / Kiro / Kimi / Qwen / ZCode / CodeWhale / Qoder / QoderWork / Reasonix hooks、opencode / MiMo Code / CodeWiz / OpenClaw / Hermes plugins 和 Pi extension。Settings Agent 页的 Install 会安装并启用该集成；Uninstall 会卸载 Clawd 管理的 hook/plugin/extension，并同时把该 agent 设为未安装、未启用。单独关闭 enabled 只会跳过启动同步并屏蔽事件/权限入口，不卸载用户已有 hooks / plugins / extensions；重新启用未安装 agent 只打开事件入口，不会写本机集成文件。手动安装命令主要用于调试、重装或远程部署。
 Settings 注册的自定义 HTTP Agent 是独立模型：`customApplications` 是注册真相，对应 `agents[customId]` 必须显式保持 `integrationInstalled=false`。注册只分配 ID 和状态入口，不安装 hook、不观察进程；v1 仅允许已注册且启用的 ID 向 `/state` 上报，`/permission` 永远不提供决定。删除或伪造的 `custom-` ID 必须直接拒绝，不能降级成 Claude Code subagent。
 Copilot CLI 同步走 `<COPILOT_HOME 或 ~/.copilot>/hooks/hooks.json`，marker-based 增量合并只接管含 `copilot-hook.js` 标记的条目，用户其他 entry / 其他 `hooks/*.json` 文件原样保留；hooks.json 或 `settings.json` 顶层 `disableAllHooks: true` 时 doctor 报 warning（不挂 Fix 按钮）。详见 `docs/guides/copilot-setup.md`。
 
@@ -162,6 +162,7 @@ Copilot CLI 同步走 `<COPILOT_HOME 或 ~/.copilot>/hooks/hooks.json`，marker-
 - Qoder 通过 `~/.qoder/settings.json` 做 **state-only** hook 集成（Phase 1：SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / PostToolUseFailure / Stop / Notification / PermissionRequest / PermissionDenied / SessionEnd）。Clawd 只把 `PermissionRequest` / `PermissionDenied` 当 notification 观察，**不替 Qoder 做权限决策**，hook stdout 恒为 `{}`，由 Qoder 原生权限流程接管；`agents/qoder.js` 的 `capabilities.permissionApproval` / `interactiveBubble` 均为 false。Windows 命令走 bash/cmd 通用的 portable 形态（`windowsWrapper:"portable"`，不带引号的正斜杠 node token + 双引号参数）：Qoder CLI 在 Windows 通过 Git Bash 执行 command hook，旧 PowerShell `-EncodedCommand` 形态会被 bash 吃掉反斜杠、exit 127 全灭（#597）；旧 encoded 条目在重装/升级时原地迁移。session id 命名空间是 `qoder:<raw>`；启动恢复只认 CLI 进程 `qodercli` / `qoder-cli`，不认 IDE 进程 `qoder.exe`。真实 Qoder CLI smoke 已完成（1.0.38，#597 遥测 127→0）；IDE（QoderWork）smoke 尚未完成。
 - HTTP 服务端口范围固定为 `127.0.0.1:23333-23337`；运行时端口写入 `~/.clawd/runtime.json`
 - 自定义 HTTP Agent 的 sender 必须读取 `~/.clawd/runtime.json`，不能把 23333 写死；注册不等于已连接。custom v1 只支持 `/state`，不支持 `/permission`
+- CodeWiz 是 opencode-family 第三个成员（`~/.config/codewiz/codewiz.jsonc`，JSONC；全局配置是 `config.json` → `codewiz.json` → `codewiz.jsonc` 的 merge，后者胜出、数组整体替换，所以 installer 必须编辑 `plugin` 实际生效的那个文件、卸载时三个候选全扫）。它的平台二进制文件名**就叫 `opencode`**，因此 `processNames` / `startupRecoveryProcessNames` 必须留空，进程存活只走 `src/state.js` 的 `commandLineNeedles`（needle `@xhs/codewiz`，同时覆盖 node wrapper 和平台二进制）；按名匹配会和真 opencode 互相误判。`$schema` 写 opencode.ai 的 URL 是因为 CodeWiz 自己就往新建配置里写这个值。Phase A 的 `permissionsEnabled` 默认 false：反向 bridge（Bun.serve）真机已验证可启动，但完整权限往返尚未验证，翻开关前先跑一轮往返
 - CodeBuddy PermissionRequest hook 的所有权只认本机 managed URL 或 marker `clawd-on-desk.permission.v1`；纯 `name:"clawd"` 不能触发改写/删除。裸 CLI 和 WSL 默认 preserve，Settings/startup/repair 必须显式传 local/custom permission target
 - Remote SSH 的远端 Node 探测要求 Node >= 14；唯一生产 probe 在 `src/remote-ssh-node.js`，不得从已停用脚本复制出第二套行为
 - 注册 Claude Code hook 时只能追加，不能覆盖用户已有 hook 数组

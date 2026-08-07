@@ -106,6 +106,17 @@ MiMo Code 状态同步（in-process plugin，~0ms 延迟）：
     → fire-and-forget HTTP POST 127.0.0.1:23333/state
     → 同上状态机（agent_id: mimocode）
 
+CodeWiz 状态同步（in-process plugin，~0ms 延迟）：
+  CodeWiz 触发事件（session.created / session.status / message.part.updated 等）
+    → hooks/codewiz-plugin/index.mjs（插件跑在 CodeWiz 的 Bun 进程内，共享 opencode 插件加载器）
+    → translateEvent 映射（与 opencode 同源的事件名 → PascalCase Clawd event 名）
+    → fire-and-forget HTTP POST 127.0.0.1:23333/state
+    → 同上状态机（agent_id: codewiz，session_id 前缀 codewiz:）
+  真机验证（v0.1.93）：SessionStart / UserPromptSubmit / PreToolUse / PostToolUse / Stop 全部命中，
+  终端 PID 链解析到 Terminal.app，反向 bridge（Bun.serve）可正常启动。
+  注意：CodeWiz 的平台二进制文件名就叫 opencode，因此进程识别不能按名匹配，
+  只能走 state.js 的 commandLineNeedles（needle "@xhs/codewiz"）。
+
 Pi 状态同步（global extension，state-only）：
   Pi 触发 session_start / before_agent_start / tool_call / tool_result / agent_end 等事件
     → ~/.pi/agent/extensions/clawd-on-desk/index.ts（Pi extension runtime）

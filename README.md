@@ -31,7 +31,7 @@ Clawd lives on your desktop and reacts to what your AI coding agent is doing —
 
 Thinking when you prompt, typing when tools run, grooving or juggling for subagents, reviewing permissions, celebrating when tasks complete, sleeping when you step away. Ships with three built-in themes: **Clawd** (pixel crab), **Calico** (三花猫), and **Cloudling** (云宝), with full support for custom themes and imported Codex Pet animation packs.
 
-> Supports Windows 11, macOS, and Ubuntu/Linux. Windows releases provide separate x64 and ARM64 installers. Source builds require Node.js. Works with **Claude Code**, **Codex CLI**, **Copilot CLI**, **Gemini CLI**, **Antigravity CLI (agy)**, **Cursor Agent**, **CodeBuddy**, **WorkBuddy**, **Kiro CLI**, **Kimi Code CLI (Kimi-CLI)**, **Qwen Code**, **ZCode**, **CodeWhale**, **opencode**, **MiMo Code**, **Pi**, **OpenClaw**, **Hermes Agent**, **Qoder**, **QoderWork**, and **Reasonix CLI**.
+> Supports Windows 11, macOS, and Ubuntu/Linux. Windows releases provide separate x64 and ARM64 installers. Source builds require Node.js. Works with **Claude Code**, **Codex CLI**, **Copilot CLI**, **Gemini CLI**, **Antigravity CLI (agy)**, **Cursor Agent**, **CodeBuddy**, **WorkBuddy**, **Kiro CLI**, **Kimi Code CLI (Kimi-CLI)**, **Qwen Code**, **ZCode**, **CodeWhale**, **opencode**, **MiMo Code**, **CodeWiz**, **Pi**, **OpenClaw**, **Hermes Agent**, **Qoder**, **QoderWork**, and **Reasonix CLI**.
 
 ## Features
 
@@ -71,6 +71,8 @@ Thinking when you prompt, typing when tools run, grooving or juggling for subage
 - **Mini mode** — drag to right edge or right-click "Mini Mode"; Clawd hides at screen edge with peek-on-hover, mini alerts/celebrations, and parabolic jump transitions
 
 ### Permission Bubble
+- **CodeWiz** — optional [plugin integration](https://opencode.ai/docs/plugins) via `~/.config/codewiz/codewiz.jsonc` (install from Settings → Agents or run `npm run install:codewiz-plugin`); an opencode-derived CLI sharing the same plugin loader and event contract. Its global config merges `config.json` → `codewiz.json` → `codewiz.jsonc`, and the installer edits whichever file's `plugin` array wins
+
 - **In-app permission review** — when Claude Code, Codex CLI, CodeBuddy, opencode, or MiMo Code request supported tool permissions, Clawd pops a floating bubble card instead of waiting in the terminal
 - **Allow / deny / agent-native extras** — one-click approve or reject, plus permission rules / `Always` actions when the source agent supports them
 - **Global hotkeys** — `Ctrl+Shift+Y` to Allow, `Ctrl+Shift+N` to Deny the latest permission bubble (only registered while bubbles are visible)
@@ -166,7 +168,7 @@ npm install
 npm start
 ```
 
-**Claude Code** and **Codex CLI** work out of the box with auto-registered hooks. For **Copilot CLI**, **Gemini CLI**, **Antigravity CLI (agy)**, **Cursor Agent**, **CodeBuddy**, **WorkBuddy**, **Kiro CLI**, **Kimi Code CLI (Kimi-CLI)**, **Qwen Code**, **ZCode**, **CodeWhale**, **opencode**, **MiMo Code**, **Pi**, **OpenClaw**, **Hermes Agent**, **Qoder**, **QoderWork**, and **Reasonix CLI**, install the integration from **Settings → Agents** first; Clawd then keeps it synced while it remains enabled. Also covers remote SSH, WSL, and platform-specific notes (macOS / Linux): **[docs/guides/setup-guide.md](docs/guides/setup-guide.md)**
+**Claude Code** and **Codex CLI** work out of the box with auto-registered hooks. For **Copilot CLI**, **Gemini CLI**, **Antigravity CLI (agy)**, **Cursor Agent**, **CodeBuddy**, **WorkBuddy**, **Kiro CLI**, **Kimi Code CLI (Kimi-CLI)**, **Qwen Code**, **ZCode**, **CodeWhale**, **opencode**, **MiMo Code**, **CodeWiz**, **Pi**, **OpenClaw**, **Hermes Agent**, **Qoder**, **QoderWork**, and **Reasonix CLI**, install the integration from **Settings → Agents** first; Clawd then keeps it synced while it remains enabled. Also covers remote SSH, WSL, and platform-specific notes (macOS / Linux): **[docs/guides/setup-guide.md](docs/guides/setup-guide.md)**
 
 Want to run Claude Code / Codex CLI on a remote server and surface state plus permission bubbles in your local Clawd? Use the in-app **Settings → Remote SSH → Deploy / Repair Hooks**. Full walkthrough, shared-server isolation boundary, Doctor boundary, and FAQ: **[docs/guides/guide-remote-ssh.md](docs/guides/guide-remote-ssh.md)**
 

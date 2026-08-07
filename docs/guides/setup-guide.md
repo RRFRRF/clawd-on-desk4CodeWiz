@@ -95,6 +95,8 @@ Running `npm run install:claude-hooks` for a local hook repair does not opt in. 
 
 **MiMo Code** — uses a plugin entry in `~/.config/mimocode/mimocode.jsonc`. Install it from **Settings → Agents** when you want local MiMo Code tracking; after that Clawd keeps the plugin synced on launch while MiMo Code remains enabled. You can also run `node hooks/mimocode-install.js` manually. MiMo Code shares the same `@mimo-ai/plugin` SDK, zero-latency event streaming, and Allow/Always/Deny permission behavior as opencode. In both integrations, child sessions spawned by the `task` tool are headless and do not participate in the visible multi-session animation fanout.
 
+**CodeWiz** — uses a plugin entry in `~/.config/codewiz/codewiz.jsonc`. Install it from **Settings → Agents** when you want local CodeWiz tracking; after that Clawd keeps the plugin synced on launch while CodeWiz remains enabled. You can also run `npm run install:codewiz-plugin` manually. CodeWiz is an opencode-derived CLI and shares the same plugin loader and event contract, so it gets the same zero-latency event streaming as opencode. Note that CodeWiz's effective global config is a merge of `config.json` → `codewiz.json` → `codewiz.jsonc` (later wins), and the installer edits the file whose `plugin` array actually wins.
+
 **Pi** — uses a global extension directory at `~/.pi/agent/extensions/clawd-on-desk`. Install it from **Settings → Agents** when you want local Pi tracking; after that Clawd keeps the extension synced on launch while Pi remains enabled. You can also run `npm run install:pi-extension` manually. Interactive Pi sessions report lifecycle and tool activity to Clawd, but Pi is state-only: Clawd does not show permission bubbles, does not call Pi terminal confirmation, and preserves Pi's default YOLO execution behavior.
 
 **OpenClaw** — uses a plugin path under `~/.openclaw/openclaw.json`. Install it from **Settings → Agents** when you want local OpenClaw tracking; after that Clawd keeps the plugin synced on launch while OpenClaw remains enabled. You can also run `npm run install:openclaw-plugin` manually to let OpenClaw's CLI handle first-time setup. Phase 1 is state-only and targets local `openclaw tui --local` sessions.
@@ -262,6 +264,9 @@ node hooks/opencode-install.js
 
 # MiMo Code
 node hooks/mimocode-install.js
+
+# CodeWiz
+node hooks/codewiz-install.js
 
 # Pi
 node hooks/pi-install.js

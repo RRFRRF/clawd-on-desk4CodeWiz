@@ -28,7 +28,7 @@ Clawd 住在你的桌面上，实时感知 AI 编程助手正在做什么。发�
 
 你提问时它思考，工具运行时它打字，子代理工作时它会戴耳机律动或三球杂耍，审批权限时它弹卡片，任务完成时它庆祝，你离开时它睡觉。内置三套主题：**Clawd**（像素螃蟹）、**Calico**（三花猫）和 **Cloudling**（云宝），支持自定义主题，也支持导入 Codex Pet 动画包。
 
-> 支持 Windows 11、macOS 和 Ubuntu/Linux。Windows 发布包提供独立的 x64 和 ARM64 安装包。源码运行需要 Node.js。支持 **Claude Code**、**Codex CLI**、**Copilot CLI**、**Gemini CLI**、**Antigravity CLI (agy)**、**Cursor Agent**、**CodeBuddy**、**WorkBuddy**、**Kiro CLI**、**Kimi Code CLI（Kimi-CLI）**、**Qwen Code**、**ZCode**、**CodeWhale**、**opencode**、**MiMo Code**、**Pi**、**OpenClaw**、**Hermes Agent**、**Qoder**、**QoderWork** 与 **Reasonix CLI**。
+> 支持 Windows 11、macOS 和 Ubuntu/Linux。Windows 发布包提供独立的 x64 和 ARM64 安装包。源码运行需要 Node.js。支持 **Claude Code**、**Codex CLI**、**Copilot CLI**、**Gemini CLI**、**Antigravity CLI (agy)**、**Cursor Agent**、**CodeBuddy**、**WorkBuddy**、**Kiro CLI**、**Kimi Code CLI（Kimi-CLI）**、**Qwen Code**、**ZCode**、**CodeWhale**、**opencode**、**MiMo Code**、**CodeWiz**、**Pi**、**OpenClaw**、**Hermes Agent**、**Qoder**、**QoderWork** 与 **Reasonix CLI**。
 
 ## 功能特性
 
@@ -68,6 +68,8 @@ Clawd 住在你的桌面上，实时感知 AI 编程助手正在做什么。发�
 - **极简模式** — 拖到右边缘或右键"极简模式"；Clawd 藏在屏幕边缘，悬停探头招手，通知/完成有迷你动画，抛物线跳跃过渡
 
 ### 权限审批气泡
+- **CodeWiz** — 可选 [plugin 集成](https://opencode.ai/docs/plugins)，写入 `~/.config/codewiz/codewiz.jsonc`（从 Settings → Agents 安装，或执行 `npm run install:codewiz-plugin`）；opencode 衍生 CLI，共用同一套插件加载器和事件契约。其全局配置是 `config.json` → `codewiz.json` → `codewiz.jsonc` 的合并结果，安装器会写入 `plugin` 数组实际生效的那个文件
+
 - **桌面端权限审批** — 当 Claude Code、Codex CLI、CodeBuddy、opencode 或 MiMo Code 请求受支持的工具权限时，Clawd 会弹出浮动卡片，无需切回终端
 - **允许 / 拒绝 / Agent 原生扩展项** — 一键批准或拒绝；如果该 Agent 支持，还会显示权限规则 / `Always` 一类的额外操作
 - **全局快捷键** — `Ctrl+Shift+Y` 允许、`Ctrl+Shift+N` 拒绝最新的权限气泡（仅在气泡可见时注册）
@@ -162,7 +164,7 @@ npm install
 npm start
 ```
 
-**Claude Code**、**Codex CLI** 会自动注册 hooks，开箱即用。**Copilot CLI**、**Gemini CLI**、**Antigravity CLI (agy)**、**Cursor Agent**、**CodeBuddy**、**WorkBuddy**、**Kiro CLI**、**Kimi Code CLI（Kimi-CLI）**、**Qwen Code**、**ZCode**、**CodeWhale**、**opencode**、**MiMo Code**、**Pi**、**OpenClaw**、**Hermes Agent**、**Qoder**、**QoderWork**、**Reasonix CLI** 需要先在 **Settings → Agents** 安装对应集成；安装且启用后，Clawd 才会在启动时继续同步。也涵盖远程 SSH、WSL 及平台说明（macOS / Linux）：**[docs/guides/setup-guide.zh-CN.md](docs/guides/setup-guide.zh-CN.md)**
+**Claude Code**、**Codex CLI** 会自动注册 hooks，开箱即用。**Copilot CLI**、**Gemini CLI**、**Antigravity CLI (agy)**、**Cursor Agent**、**CodeBuddy**、**WorkBuddy**、**Kiro CLI**、**Kimi Code CLI（Kimi-CLI）**、**Qwen Code**、**ZCode**、**CodeWhale**、**opencode**、**MiMo Code**、**CodeWiz**、**Pi**、**OpenClaw**、**Hermes Agent**、**Qoder**、**QoderWork**、**Reasonix CLI** 需要先在 **Settings → Agents** 安装对应集成；安装且启用后，Clawd 才会在启动时继续同步。也涵盖远程 SSH、WSL 及平台说明（macOS / Linux）：**[docs/guides/setup-guide.zh-CN.md](docs/guides/setup-guide.zh-CN.md)**
 
 想在远程服务器上跑 Claude Code / Codex CLI 并把状态和权限气泡转发到本地 Clawd？请使用应用内 **Settings → 远程 SSH → 部署 / 修复 Hook**。完整步骤、共享服务器隔离边界、Doctor 边界和 FAQ 见：**[docs/guides/guide-remote-ssh.zh-CN.md](docs/guides/guide-remote-ssh.zh-CN.md)**
 

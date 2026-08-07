@@ -58,6 +58,8 @@ Claude Code 只有一个用户级 statusline 槽位，因此 Clawd 绝不会静�
 
 **opencode** — 使用 `~/.config/opencode/opencode.json` 里的 plugin 配置。需要本机 opencode 追踪时，先到 **Settings → Agents** 安装；安装且启用后，Clawd 才会在启动时继续同步 plugin。也可以手动执行 `node hooks/opencode-install.js`。
 
+**CodeWiz** — 使用 `~/.config/codewiz/codewiz.jsonc` 里的 plugin 配置。需要本机 CodeWiz 追踪时，先到 **Settings → Agents** 安装；安装且启用后，Clawd 才会在启动时继续同步 plugin。也可以手动执行 `npm run install:codewiz-plugin`。CodeWiz 是 opencode 衍生的 CLI，共用同一套插件加载器和事件契约，因此拥有与 opencode 相同的零延迟事件流。注意 CodeWiz 的全局配置是 `config.json` → `codewiz.json` → `codewiz.jsonc` 三个文件的合并结果（后者胜出），安装器会写入 `plugin` 数组实际生效的那个文件。
+
 **Pi** — 使用全局 extension 目录 `~/.pi/agent/extensions/clawd-on-desk`。需要本机 Pi 追踪时，先到 **Settings → Agents** 安装；安装且启用后，Clawd 才会在启动时继续同步 extension。也可以手动执行 `npm run install:pi-extension`。交互式 Pi 会话会向 Clawd 上报生命周期和工具活动，但 Pi 是 state-only：Clawd 不显示权限气泡、不调用 Pi 终端确认，并保留 Pi 默认 YOLO 执行行为。
 
 **OpenClaw** — 使用 `~/.openclaw/openclaw.json` 里的 plugin 路径。需要本机 OpenClaw 追踪时，先到 **Settings → Agents** 安装；安装且启用后，Clawd 才会在启动时继续同步 plugin。也可以手动执行 `npm run install:openclaw-plugin`，由 OpenClaw CLI 处理首次安装。Phase 1 只做状态动画，面向本地 `openclaw tui --local` 会话；暂不接 OpenClaw 权限气泡，也不支持 OpenClaw 终端聚焦。
@@ -189,6 +191,9 @@ node hooks/workbuddy-install.js
 
 # opencode
 node hooks/opencode-install.js
+
+# CodeWiz
+node hooks/codewiz-install.js
 
 # Pi
 node hooks/pi-install.js
