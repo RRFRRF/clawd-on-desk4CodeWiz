@@ -720,6 +720,23 @@ test("a DSH_HOME alias is frozen to one real target for namespace, CLI env, and 
   assert.strictEqual(observedDshHome, fs.realpathSync(harness.dshHome));
 });
 
+test("managed generation ownership treats Windows path casing as equivalent", () => {
+  const bundleHash = "abc123";
+  const record = {
+    packageDir: "C:\\Users\\Runner\\.clawd\\integrations\\deepseek-harness\\homes\\ns\\generations\\abc123",
+    packageManifest: { name: BRIDGE_PACKAGE_NAME },
+    clawdManifest: {
+      owner: "clawd-on-desk",
+      schemaVersion: 1,
+      protocolVersion: 1,
+      bundleHash,
+    },
+    actualBundleHash: bundleHash,
+  };
+  const managedRoot = "c:\\Users\\Runner\\.clawd\\integrations\\deepseek-harness\\homes\\ns";
+  assert.strictEqual(dshInstallTest.isManagedGenerationRecord(record, managedRoot, "win32"), true);
+});
+
 test("failed add returns an error and removes an unreferenced staged generation", async (t) => {
   const harness = makeHarness();
   const cli = makeOfficialCli(harness, { throwError: "dsh not on PATH" });

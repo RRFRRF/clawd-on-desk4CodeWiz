@@ -593,14 +593,15 @@ function isIntactManaged(record) {
     && record.actualBundleHash === record.clawdManifest.bundleHash;
 }
 
-function isManagedGenerationRecord(record, managedRoot) {
+function isManagedGenerationRecord(record, managedRoot, platform = process.platform) {
   if (!isIntactManaged(record) || !managedRoot) return false;
-  const expected = path.resolve(
+  const pathApi = platform === "win32" ? path.win32 : path.posix;
+  const expected = pathApi.resolve(
     managedRoot,
     "generations",
     record.clawdManifest.bundleHash
   );
-  return path.resolve(record.packageDir) === expected;
+  return sameResolvedPath(record.packageDir, expected, platform);
 }
 
 function classifyDeepSeekHarnessProfile({
@@ -615,6 +616,7 @@ function classifyDeepSeekHarnessProfile({
   sourcePath,
   managedRoot,
   expectedHash,
+  platform = process.platform,
 }) {
   const dependencies = profileManifest.dependencies && typeof profileManifest.dependencies === "object"
     ? profileManifest.dependencies
@@ -635,8 +637,8 @@ function classifyDeepSeekHarnessProfile({
   const resolved = installationResolved || profileResolved || effectiveFallbackResolved;
   const profileOwned = isIntactManaged(profileResolved);
   const fallbackOwned = isIntactManaged(effectiveFallbackResolved);
-  const sourceOwned = isManagedGenerationRecord(sourceResolved, managedRoot);
-  const managedGenerationOwned = isManagedGenerationRecord(managedGenerationResolved, managedRoot);
+  const sourceOwned = isManagedGenerationRecord(sourceResolved, managedRoot, platform);
+  const managedGenerationOwned = isManagedGenerationRecord(managedGenerationResolved, managedRoot, platform);
   const ownershipRecord = sourceOwned
     ? sourceResolved
     : (managedGenerationOwned ? managedGenerationResolved : null);
@@ -791,6 +793,7 @@ function inspectDeepSeekHarnessDiskSync(options = {}) {
     sourcePath,
     managedRoot,
     expectedHash,
+    platform: options.platform || process.platform,
   });
   const sourceAwareHealth = verifyCurrentSource && !expectedHash && health.owned
     ? { ...health, status: "source-unavailable" }
@@ -880,6 +883,7 @@ async function inspectDeepSeekHarnessIntegration(options = {}) {
     sourcePath,
     managedRoot,
     expectedHash: options.expectedHash,
+    platform: options.platform || process.platform,
   });
 }
 
@@ -1554,9 +1558,11 @@ function hasMutableManagedState(health) {
 
 function sameResolvedPath(left, right, platform = process.platform) {
   if (!left || !right) return false;
+  const pathApi = platform === "win32" ? path.win32 : path.posix;
   const normalize = (value) => {
-    const resolved = path.resolve(value);
-    return platform === "win32" ? resolved.toLowerCase() : resolved;
+    const resolved = pathApi.resolve(value);
+    if (platform !== "win32") return resolved;
+    return resolved.replace(/\//g, "\\").toLowerCase();
   };
   return normalize(left) === normalize(right);
 }
@@ -2278,6 +2284,7 @@ module.exports = {
     healthFingerprint,
     inspectionLatchPath,
     isGenerationReferenced,
+    isManagedGenerationRecord,
     unlinkManagedProfileResidue,
     manualGenerationReferencePath,
     readManualGenerationReference,
