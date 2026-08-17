@@ -15,6 +15,7 @@ function buildSettingsAgentOrderExports() {
     "workbuddy",
     "qoder",
     "qoderwork",
+    "qwenwork",
   ];
 
   const NON_COLLAPSIBLE_AGENT_PRIORITY = [

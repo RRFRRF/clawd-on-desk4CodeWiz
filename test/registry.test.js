@@ -8,6 +8,7 @@ describe("Agent Registry", () => {
     const ids = agents.map((a) => a.id);
     assert.deepStrictEqual(ids, [
       "claude-code",
+      "deepseek-harness",
       "codex",
       "copilot-cli",
       "gemini-cli",
@@ -28,12 +29,14 @@ describe("Agent Registry", () => {
       "qoder",
       "reasonix",
       "qoderwork",
+      "qwenwork",
       "workbuddy",
     ]);
   });
 
   it("should look up agents by ID", () => {
     assert.strictEqual(registry.getAgent("claude-code").name, "Claude Code");
+    assert.strictEqual(registry.getAgent("deepseek-harness").name, "DeepSeek Harness (web, experimental)");
     assert.strictEqual(registry.getAgent("codex").name, "Codex CLI");
     assert.strictEqual(registry.getAgent("copilot-cli").name, "Copilot CLI");
     assert.strictEqual(registry.getAgent("gemini-cli").name, "Gemini CLI");
@@ -49,6 +52,7 @@ describe("Agent Registry", () => {
     assert.strictEqual(registry.getAgent("qoder").name, "Qoder");
     assert.strictEqual(registry.getAgent("reasonix").name, "Reasonix");
     assert.strictEqual(registry.getAgent("qoderwork").name, "QoderWork");
+    assert.strictEqual(registry.getAgent("qwenwork").name, "QwenWork");
     assert.strictEqual(registry.getAgent("workbuddy").name, "WorkBuddy");
     assert.strictEqual(registry.getAgent("nonexistent"), undefined);
   });
@@ -97,6 +101,9 @@ describe("Agent Registry", () => {
 
     const qoderwork = registry.getAgent("qoderwork");
     assert.deepStrictEqual(qoderwork.processNames.win, ["QoderWork.exe"]);
+
+    const qwenwork = registry.getAgent("qwenwork");
+    assert.deepStrictEqual(qwenwork.processNames.win, ["QwenWorkCN.exe"]);
 
     const workbuddy = registry.getAgent("workbuddy");
     assert.deepStrictEqual(workbuddy.processNames.win, ["WorkBuddy.exe", "workbuddy.exe"]);
@@ -152,6 +159,13 @@ describe("Agent Registry", () => {
     const qoderwork = registry.getAgent("qoderwork");
     assert.deepStrictEqual(qoderwork.processNames.linux, ["QoderWork"]);
 
+    // #843: QwenWork ships macOS 14+ / Windows 10+ / HarmonyOS 6.1+ only
+    // (https://qwenwork.cn/download). There is no Linux client, so the list is
+    // deliberately empty rather than a speculative executable name.
+    const qwenwork = registry.getAgent("qwenwork");
+    assert.deepStrictEqual(qwenwork.processNames.linux, []);
+    assert.deepStrictEqual(qwenwork.processNames.mac, ["QwenWorkCN", "千问办公"]);
+
     const workbuddy = registry.getAgent("workbuddy");
     assert.deepStrictEqual(workbuddy.processNames.linux, ["workbuddy", "WorkBuddy"]);
   });
@@ -205,6 +219,7 @@ describe("Agent Registry", () => {
     assert.ok(startupAgentIds.has("reasonix"));
     assert.ok(!startupAgentIds.has("cursor-agent"));
     assert.ok(!startupAgentIds.has("qoderwork"));
+    assert.ok(!startupAgentIds.has("qwenwork"));
     assert.ok(!startupAgentIds.has("workbuddy"));
     // CodeWiz deliberately ships NO process names: its platform binary is
     // literally named "opencode" (@xhs/codewiz-<platform>/bin/opencode), so a
@@ -231,6 +246,10 @@ describe("Agent Registry", () => {
     );
     assert.deepStrictEqual(
       registry.getAgent("qoderwork").startupRecoveryProcessNames,
+      { win: [], mac: [], linux: [] }
+    );
+    assert.deepStrictEqual(
+      registry.getAgent("qwenwork").startupRecoveryProcessNames,
       { win: [], mac: [], linux: [] }
     );
     assert.deepStrictEqual(

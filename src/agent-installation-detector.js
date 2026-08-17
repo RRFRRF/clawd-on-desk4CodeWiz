@@ -9,6 +9,7 @@ const { DEFAULT_INTEGRATION_INSTALLED_IDS, normalizePathList } = require("./pref
 const copilot = require("../hooks/copilot-install");
 const hermes = require("../hooks/hermes-install");
 const reasonix = require("../hooks/reasonix-install");
+const dsh = require("../hooks/dsh-install");
 const { commandMatchesMarker } = require("../hooks/json-utils");
 const { identifyCustomApplication } = require("./custom-applications");
 
@@ -167,6 +168,17 @@ function resolveAgentPaths(descriptor, options) {
       configPath: path.join(hermesHome, "plugins", hermes.PLUGIN_ID),
       configFilePath: path.join(hermesHome, "config.yaml"),
       commandPaths: hermesCommandPaths(hermesHome, platform, env),
+    }, options);
+  }
+
+  if (descriptor.agentId === "deepseek-harness") {
+    const dshHome = typeof env.DSH_HOME === "string" && env.DSH_HOME.trim()
+      ? path.resolve(env.DSH_HOME.trim())
+      : path.join(homeDir, ".dsh");
+    return finalizeAgentPaths(descriptor, {
+      parentDir: dshHome,
+      configPath: dsh.resolveDshProfileDir(dshHome),
+      commandPaths: dsh.dshCommandPathsSync({ fs: options.fs, env, platform }),
     }, options);
   }
 
@@ -380,6 +392,7 @@ function detectInstallation(descriptor, paths, options) {
     case "codewiz":
     case "qoder":
     case "qoderwork":
+    case "qwenwork":
       if (dirExists(fsImpl, paths.parentDir)) return installationResult(true, "high", "parent-dir", `${paths.parentDir} exists`);
       return notFound();
     case "reasonix":
@@ -402,6 +415,20 @@ function detectInstallation(descriptor, paths, options) {
       return notFound();
     case "hermes":
       return detectHermesInstallation(paths, options);
+    case "deepseek-harness":
+      for (const commandPath of paths.commandPaths || []) {
+        if (fileExists(fsImpl, commandPath)) {
+          return installationResult(true, "high", "command-path", `${commandPath} exists`);
+        }
+      }
+      if (dirExists(fsImpl, paths.parentDir)) {
+        const home = paths.parentDir;
+        const isDshHome = ["profiles", "sessions", "storages"].some((name) => (
+          dirExists(fsImpl, path.join(home, name))
+        ));
+        if (isDshHome) return installationResult(true, "high", "parent-dir", `${home} exists`);
+      }
+      return notFound();
     default:
       if (dirExists(fsImpl, paths.parentDir)) return installationResult(true, "medium", "parent-dir", `${paths.parentDir} exists`);
       return notFound();
@@ -482,6 +509,30 @@ function markerInDirectoryFiles(fsImpl, dirPath, marker, options = {}) {
 
 function detectClawdIntegration(descriptor, paths, options) {
   const fsImpl = options.fs;
+  if (descriptor.agentId === "deepseek-harness") {
+    const health = dsh.inspectDeepSeekHarnessDiskSync({
+      fs: fsImpl,
+      dshHome: paths.parentDir,
+      dshInstallRoot: options.dshInstallRoot,
+      managedRoot: options.dshManagedRoot,
+      homeDir: options.homeDir,
+      env: options.env,
+      platform: options.platform,
+    });
+    return health.status === "healthy"
+      ? {
+        detected: true,
+        reason: "managed-plugin",
+        detail: `${health.profileDir} contains the verified Clawd bridge`,
+        paths: { profileDir: health.profileDir, pluginDir: health.resolved.packageDir },
+      }
+      : {
+        detected: false,
+        reason: health.status,
+        detail: `DeepSeek Harness bridge is ${health.status}`,
+        paths: { profileDir: health.profileDir },
+      };
+  }
   if (descriptor.agentId === "pi") {
     const markerPath = path.join(paths.configPath, descriptor.markerFile || ".clawd-managed.json");
     return fileExists(fsImpl, markerPath)
@@ -608,6 +659,43 @@ function detectAgentInstallations(options = {}) {
 // fails (timeout, broken wsl.exe), the previous results survive.
 // Also batches dir-exists checks into one wsl.exe spawn per distro
 // instead of one per (distro × agent).
+const HERMES_WSL_HOME_SENTINEL = "CLAWD_HERMES_HOME_V1=";
+
+function quoteWslPath(value) {
+  return `'${String(value).replace(/'/g, "'\\''")}'`;
+}
+
+function parseHermesWslHome(stdout) {
+  const lines = (typeof stdout === "string" ? stdout : "")
+    .split(/\r?\n/)
+    .filter((line) => line.startsWith(HERMES_WSL_HOME_SENTINEL));
+  if (lines.length !== 1) return null;
+  const value = lines[0].slice(HERMES_WSL_HOME_SENTINEL.length);
+  if (!value.startsWith("/") || value.includes("\0") || value.includes("\r") || value.includes("\n") || value.includes("\\")) {
+    return null;
+  }
+  if (path.posix.normalize(value) !== value) return null;
+  return value;
+}
+
+async function resolveHermesWslHome(distro, wslHome, execInWsl, options = {}) {
+  // wsl.exe may add an outer shell around the requested login bash. Escape
+  // both dollars so HERMES_HOME/HOME are resolved by that login shell, after
+  // the user's profile has run, rather than by the outer launcher shell.
+  const command = "printf '" + HERMES_WSL_HOME_SENTINEL
+    + "%s\\n' \"\\${HERMES_HOME:-\\$HOME/.hermes}\"";
+  const result = await execInWsl(
+    distro,
+    command,
+    { ...options, shell: "bash", shellFlags: ["-l", "-i", "-c"], timeout: 15000 }
+  );
+  const resolved = result && result.code === 0 ? parseHermesWslHome(result.stdout) : null;
+  return {
+    path: resolved || `${wslHome.replace(/\/+$/, "")}/.hermes`,
+    customHomeUnknown: !resolved,
+  };
+}
+
 async function refreshWslDetection(options = {}) {
   if (process.platform !== "win32") {
     _cachedDetected = true;
@@ -645,6 +733,16 @@ async function refreshWslDetection(options = {}) {
         continue;
       }
 
+      const supportsHermes = descriptors.some((descriptor) =>
+        descriptor
+        && descriptor.agentId === "hermes"
+        && (!skipDefaultIntegrations || !DEFAULT_SKIPPED_AGENT_IDS.has("hermes"))
+        && getAgentInstallScriptName("hermes")
+      );
+      const hermesWslHome = supportsHermes
+        ? await resolveHermesWslHome(distro.name, wslHome, execInWsl, options)
+        : null;
+
       // Collect all directories to check for this distro. Only agents that
       // WSL deploy actually supports get entries — the UI renders a Pair
       // button per entry, and a guaranteed-to-fail Pair is worse than none.
@@ -653,9 +751,21 @@ async function refreshWslDetection(options = {}) {
         if (!descriptor || typeof descriptor.agentId !== "string") continue;
         if (skipDefaultIntegrations && DEFAULT_SKIPPED_AGENT_IDS.has(descriptor.agentId)) continue;
         if (!getAgentInstallScriptName(descriptor.agentId)) continue;
-        const wslParentDir = rebaseHomePathPosix(descriptor.parentDir, wslHome, homeDir);
+        // Hermes' descriptor was resolved in the Windows process and can point
+        // at LOCALAPPDATA or a host-only HERMES_HOME. Never rebase that value
+        // into WSL; resolve the distro's own environment above.
+        const wslParentDir = descriptor.agentId === "hermes" && hermesWslHome
+          ? hermesWslHome.path
+          : rebaseHomePathPosix(descriptor.parentDir, wslHome, homeDir);
         if (!wslParentDir) continue;
-        checks.push({ descriptor, wslParentDir });
+        checks.push({
+          descriptor,
+          wslParentDir,
+          integrationEvidence: descriptor.agentId === "hermes" ? "hermes-plugin-files" : null,
+          customHomeUnknown: descriptor.agentId === "hermes" && hermesWslHome
+            ? hermesWslHome.customHomeUnknown
+            : false,
+        });
       }
 
       if (checks.length === 0) continue;
@@ -668,6 +778,19 @@ async function refreshWslDetection(options = {}) {
         const escaped = c.wslParentDir.replace(/'/g, "'\\''");
         return `test -d '${escaped}' && echo "OK ${i}" || echo "NO ${i}"`;
       });
+      for (let i = 0; i < checks.length; i++) {
+        const check = checks[i];
+        if (check.integrationEvidence !== "hermes-plugin-files") continue;
+        const primaryPlugin = `${check.wslParentDir.replace(/\/+$/, "")}/plugins/clawd-on-desk`;
+        const profilesDir = `${check.wslParentDir.replace(/\/+$/, "")}/profiles`;
+        batchLines.push(
+          `if { test -f ${quoteWslPath(`${primaryPlugin}/plugin.yaml`)} || `
+          + `test -f ${quoteWslPath(`${primaryPlugin}/__init__.py`)} || `
+          + `find ${quoteWslPath(profilesDir)} -mindepth 4 -maxdepth 4 -type f `
+          + `\\( -path '*/plugins/clawd-on-desk/plugin.yaml' -o -path '*/plugins/clawd-on-desk/__init__.py' \\) `
+          + `-print -quit 2>/dev/null | grep -q .; }; then echo "INTFILE ${i} 1"; else echo "INTFILE ${i} 0"; fi`
+        );
+      }
       // Two independent deployment signals, because they answer different
       // UI questions:
       //   DEPFILE — hook files exist in the distro. Pairing ANY agent copies
@@ -703,23 +826,56 @@ async function refreshWslDetection(options = {}) {
         continue;
       }
 
-      // Parse: collect indices of "OK" lines and the two DEP markers.
-      const foundIndices = new Set();
-      let hooksFilesPresent = false;
-      let hooksRegistered = false;
+      // Parse every expected marker strictly. Truncated, duplicate, or
+      // conflicting output is not a trustworthy negative result.
+      const dirStates = new Map();
+      const integrationStates = new Map();
+      let hooksFilesPresent = null;
+      let hooksRegistered = null;
+      let markerError = false;
       const stdout = (batchResult && batchResult.stdout) || "";
       for (const line of stdout.split("\n")) {
         const trimmed = line.trim();
-        const m = trimmed.match(/^OK (\d+)$/);
-        if (m) foundIndices.add(parseInt(m[1], 10));
-        else if (trimmed === "DEPFILE 1") hooksFilesPresent = true;
-        else if (trimmed === "DEPREG 1") hooksRegistered = true;
+        let match = trimmed.match(/^(OK|NO) (\d+)$/);
+        if (match) {
+          const index = parseInt(match[2], 10);
+          const value = match[1] === "OK";
+          if (dirStates.has(index)) markerError = true;
+          else dirStates.set(index, value);
+          continue;
+        }
+        match = trimmed.match(/^INTFILE (\d+) ([01])$/);
+        if (match) {
+          const index = parseInt(match[1], 10);
+          const value = match[2] === "1";
+          if (integrationStates.has(index)) markerError = true;
+          else integrationStates.set(index, value);
+          continue;
+        }
+        if (trimmed === "DEPFILE 1" || trimmed === "DEPFILE 0") {
+          if (hooksFilesPresent !== null) markerError = true;
+          else hooksFilesPresent = trimmed.endsWith("1");
+        } else if (trimmed === "DEPREG 1" || trimmed === "DEPREG 0") {
+          if (hooksRegistered !== null) markerError = true;
+          else hooksRegistered = trimmed.endsWith("1");
+        }
+      }
+
+      if (dirStates.size !== checks.length || hooksFilesPresent === null || hooksRegistered === null) markerError = true;
+      for (let i = 0; i < checks.length; i++) {
+        if (!dirStates.has(i)) markerError = true;
+        if (checks[i].integrationEvidence && !integrationStates.has(i)) markerError = true;
+      }
+      if (markerError) {
+        console.warn("Clawd: WSL batch marker output was incomplete or ambiguous in", distro.name);
+        keepPreviousEntries(distro.name);
+        continue;
       }
 
       for (let i = 0; i < checks.length; i++) {
-        const { descriptor, wslParentDir } = checks[i];
-        const hasParentDir = foundIndices.has(i);
-        wslAgents.push({
+        const { descriptor, wslParentDir, integrationEvidence, customHomeUnknown } = checks[i];
+        const hasParentDir = dirStates.get(i) === true;
+        const entry = {
           agentId: descriptor.agentId,
           agentName: descriptor.agentName,
           distro: distro.name,
@@ -733,7 +889,12 @@ async function refreshWslDetection(options = {}) {
           wslParentDir,
           hooksDeployed: hooksFilesPresent && hooksRegistered,
           hooksFilesPresent,
-        });
+        };
+        if (integrationEvidence) {
+          entry.integrationFilesPresent = integrationStates.get(i) === true;
+          entry.hermesHomeResolutionUnknown = customHomeUnknown;
+        }
+        wslAgents.push(entry);
       }
     }
 

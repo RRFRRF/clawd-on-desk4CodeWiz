@@ -29,6 +29,7 @@ const {
 const AUTO_REPAIRABLE_AGENT_IDS = new Set([
   "claude-code",
   "codex",
+  "deepseek-harness",
   "copilot-cli",
   "cursor-agent",
   "gemini-cli",
@@ -47,11 +48,13 @@ const AUTO_REPAIRABLE_AGENT_IDS = new Set([
   "qoder",
   "reasonix",
   "qoderwork",
+  "qwenwork",
 ]);
 
 const INSTALLABLE_AGENT_IDS = new Set([
   "claude-code",
   "codex",
+  "deepseek-harness",
   "copilot-cli",
   "cursor-agent",
   "gemini-cli",
@@ -72,6 +75,7 @@ const INSTALLABLE_AGENT_IDS = new Set([
   "qoder",
   "reasonix",
   "qoderwork",
+  "qwenwork",
 ]);
 const SETTABLE_AGENT_FLAGS = AGENT_FLAGS.filter((flag) => flag !== "integrationInstalled");
 const CUSTOM_DISCOVERY_AGENT_IDS = new Set([...INSTALLABLE_AGENT_IDS, "custom"]);
@@ -286,9 +290,23 @@ function normalizeAgentIntegrationPayload(payload, validateAgentId, actionName) 
 }
 
 function resultMessage(result, fallback) {
-  return result && typeof result === "object" && typeof result.message === "string" && result.message
+  const base = result && typeof result === "object" && typeof result.message === "string" && result.message
     ? result.message
     : fallback;
+  const manualCommand = result && typeof result === "object" && typeof result.manualCommand === "string"
+    ? result.manualCommand.trim()
+    : "";
+  return manualCommand && !base.includes(manualCommand) ? `${base}\n${manualCommand}` : base;
+}
+
+function integrationResultMetadata(result) {
+  if (!result || typeof result !== "object") return {};
+  const metadata = {};
+  for (const key of ["reason", "manualCommand", "supportedRange", "detectedVersion", "healthReason"]) {
+    if (typeof result[key] === "string" && result[key]) metadata[key] = result[key];
+  }
+  if (result.manualInspectionRequired === true) metadata.manualInspectionRequired = true;
+  return metadata;
 }
 
 function buildAgentCommit(snapshot, agentId, patch) {
@@ -552,13 +570,14 @@ async function installAgentIntegration(payload, deps = {}) {
     if (result && typeof result === "object" && result.status === "skipped") {
       return {
         status: "skipped",
-        reason: result.reason,
+        ...integrationResultMetadata(result),
         message: resultMessage(result, `Skipped installing ${agentId}`),
       };
     }
     if (result && typeof result === "object" && result.status && result.status !== "ok") {
       return {
         status: "error",
+        ...integrationResultMetadata(result),
         message: resultMessage(result, `Failed to install ${agentId}`),
       };
     }
@@ -602,6 +621,7 @@ async function uninstallAgentIntegration(payload, deps = {}) {
     if (result && typeof result === "object" && result.status === "error") {
       return {
         status: "error",
+        ...integrationResultMetadata(result),
         message: resultMessage(result, `Failed to uninstall ${agentId}`),
       };
     }
@@ -700,7 +720,8 @@ async function repairAgentIntegration(payload, deps) {
     if (result && typeof result === "object" && result.status && result.status !== "ok") {
       return {
         status: "error",
-        message: result.message || `Failed to repair ${agentId}`,
+        ...integrationResultMetadata(result),
+        message: resultMessage(result, `Failed to repair ${agentId}`),
       };
     }
     return {
@@ -837,10 +858,20 @@ async function _wslCommand(payload, deps, { commandName, depName, action }) {
   try {
     const result = await deps[depName](distro, agentId);
     if (result && result.ok) {
-      const okResult = { status: "ok", message: `${action} WSL ${distro}` };
+      const okResult = {
+        status: "ok",
+        message: (typeof result.message === "string" && result.message) || `${action} WSL ${distro}`,
+      };
       // deploy-only: false = hooks installed but Clawd is unreachable from
       // the distro (NAT networking) — renderer shows a localized warning.
       if (result.connectivity === false) okResult.wslConnectivity = false;
+      if (typeof result.warning === "string" && result.warning) okResult.warning = result.warning;
+      if (commandName === "deployToWsl" && agentId === "hermes") {
+        // WSL pairing opens the shared ingress gate but is not a Windows-local
+        // integration install. Preserve integrationInstalled and every sibling
+        // flag so startup cannot auto-sync Hermes onto the host by accident.
+        okResult.commit = buildAgentCommit(deps.snapshot || {}, agentId, { enabled: true });
+      }
       return okResult;
     }
     return {

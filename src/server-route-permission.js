@@ -3,7 +3,15 @@
 const {
   CLAWD_SERVER_HEADER,
   CLAWD_SERVER_ID,
+  CLAWD_HOOK_PID_HEADER,
+  CLAWD_LEGACY_PROCESS_CACHE_HEADER,
+  CLAWD_PROCESS_INSTANCE_HEADER,
 } = require("../hooks/server-config");
+const {
+  assessWindowsProcessChainRequest,
+  buildShadowComparison,
+  processMetadataForState,
+} = require("./server-windows-process-metadata");
 const {
   CODEX_OFFICIAL_HOOK_SOURCE,
   CODEX_SESSION_ROLE_SUBAGENT,
@@ -21,6 +29,7 @@ const {
   buildToolInputFingerprint,
 } = require("./server-permission-utils");
 const { resolveHookAgentId } = require("./server-agent-id");
+const { getAgent } = require("../agents/registry");
 const { isOpencodeFamily } = require("../agents/opencode-family");
 const { resolveSessionIdentity } = require("./session-key");
 const {
@@ -31,6 +40,7 @@ const {
   classifyPermissionInteraction,
   isDecisionInteraction,
 } = require("./permission-automation-policy");
+const { sanitizeShadowRecord } = require("./windows-process-chain-shadow-log");
 
 const MAX_PERMISSION_BODY_BYTES = 524288;
 
@@ -97,6 +107,12 @@ function shouldBypassHermesBubble(ctx) {
   return !ctx.isAgentPermissionsEnabled("hermes");
 }
 
+function shouldBypassDshBubble(ctx) {
+  if (!arePermissionBubblesEnabled(ctx)) return true;
+  if (typeof ctx.isAgentPermissionsEnabled !== "function") return false;
+  return !ctx.isAgentPermissionsEnabled("deepseek-harness");
+}
+
 function shouldInterceptCodexPermission(ctx) {
   if (typeof ctx.isCodexPermissionInterceptEnabled !== "function") return true;
   return ctx.isCodexPermissionInterceptEnabled();
@@ -159,6 +175,21 @@ function normalizeString(value) {
   return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+const DSH_REASON_MAX_CHARS = 500;
+
+function normalizeDshReason(value) {
+  if (typeof value !== "string") return null;
+  let text = value
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return null;
+  if (text.length > DSH_REASON_MAX_CHARS) {
+    text = `${text.slice(0, DSH_REASON_MAX_CHARS - 1).trimEnd()}…`;
+  }
+  return text;
+}
+
 function normalizeTmuxSocket(value) {
   if (typeof value !== "string") return null;
   const text = value.trim();
@@ -214,6 +245,7 @@ function buildCodexPermissionSessionOptions(data) {
   const host = normalizeString(data.host);
   const platform = normalizeString(data.platform);
   const model = normalizeString(data.model);
+  const editor = data.editor === "code" || data.editor === "cursor" ? data.editor : null;
   const codexOriginator = normalizeString(data.codex_originator);
   const codexSource = normalizeString(data.codex_source);
   const codexSessionRole = normalizeString(data.codex_session_role);
@@ -224,6 +256,7 @@ function buildCodexPermissionSessionOptions(data) {
   if (host) options.host = host;
   if (platform) options.platform = platform;
   if (model) options.model = model;
+  if (editor) options.editor = editor;
   if (codexOriginator) options.codexOriginator = codexOriginator;
   if (codexSource) options.codexSource = codexSource;
   if (codexSessionRole) options.codexSessionRole = codexSessionRole;
@@ -295,6 +328,22 @@ function buildHermesPermissionSessionOptions(data) {
   return options;
 }
 
+function buildDshPermissionSessionOptions(data) {
+  const sourcePid = normalizePositiveInteger(data.source_pid);
+  const agentPid = normalizePositiveInteger(data.agent_pid);
+  const pidChain = Array.isArray(data.pid_chain)
+    ? data.pid_chain.filter((n) => Number.isFinite(n) && n > 0).map((n) => Math.floor(n))
+    : null;
+  const options = { agentId: "deepseek-harness" };
+  if (sourcePid) options.sourcePid = sourcePid;
+  if (agentPid) options.agentPid = agentPid;
+  if (pidChain && pidChain.length) options.pidChain = pidChain;
+  applyTerminalSessionOptions(options, data);
+  const cwd = normalizeString(data.cwd);
+  if (cwd) options.cwd = cwd;
+  return options;
+}
+
 function sendCodexPermissionNoDecision(res) {
   res.writeHead(204, { [CLAWD_SERVER_HEADER]: CLAWD_SERVER_ID });
   res.end();
@@ -330,6 +379,11 @@ function sendAntigravityPermissionNoDecision(res) {
 }
 
 function sendHermesPermissionNoDecision(res) {
+  res.writeHead(204, { [CLAWD_SERVER_HEADER]: CLAWD_SERVER_ID });
+  res.end();
+}
+
+function sendDshPermissionNoDecision(res) {
   res.writeHead(204, { [CLAWD_SERVER_HEADER]: CLAWD_SERVER_ID });
   res.end();
 }
@@ -455,6 +509,10 @@ function handlePermissionPost(req, res, options) {
     ctx,
     createRequestHookRecorder,
     remoteProfile = null,
+    isWinHost = process.platform === "win32",
+    windowsProcessChainRuntime = null,
+    resolveWindowsProcessMetadata = null,
+    recordWindowsProcessChainShadow = null,
   } = options;
   ctx.permLog(`/permission hit | DND=${ctx.doNotDisturb} pending=${ctx.pendingPermissions.length}`);
   let body = "";
@@ -481,6 +539,9 @@ function handlePermissionPost(req, res, options) {
       res.end("bad json");
       return;
     }
+    const requestHeaders = req && req.headers && typeof req.headers === "object"
+      ? req.headers
+      : {};
     const hookIdentity = resolveHookAgentId(data, {
       customAgentIds: typeof ctx.getCustomAgentIds === "function" ? ctx.getCustomAgentIds() : [],
     });
@@ -707,12 +768,113 @@ function handlePermissionPost(req, res, options) {
         const toolInputFingerprint = typeof data.tool_input_fingerprint === "string" && data.tool_input_fingerprint
           ? data.tool_input_fingerprint
           : buildToolInputFingerprint(rawInput);
-        const codexSessionOptions = {
+        const legacyCodexSessionOptions = {
           ...buildCodexPermissionSessionOptions(data),
           sessionAutomationIdentity,
           ...trustedSessionFields(sessionIdentity),
         };
         const isCodexSubagent = isInteractiveCodexSubagentPermission(agentId, data);
+        let codexSessionOptions = legacyCodexSessionOptions;
+        let codexProcessMetadataResolved = false;
+        const resolveCodexSessionProcessMetadata = () => {
+          if (codexProcessMetadataResolved) return codexSessionOptions;
+          codexProcessMetadataResolved = true;
+          const existingSession = ctx.sessions && typeof ctx.sessions.get === "function"
+            ? ctx.sessions.get(sessionId)
+            : null;
+          const effectiveHost = legacyCodexSessionOptions.host
+            || (existingSession && existingSession.host)
+            || null;
+          const effectiveWslDistro = normalizeString(data.wsl_distro)
+            || (existingSession && existingSession.wslDistro)
+            || null;
+          const effectivePlatform = legacyCodexSessionOptions.platform
+            || (existingSession && existingSession.platform)
+            || null;
+          const assessment = assessWindowsProcessChainRequest({
+            agentId: "codex",
+            runtime: windowsProcessChainRuntime,
+            isWinHost,
+            remoteProfile,
+            effectiveHost,
+            effectiveWslDistro,
+            effectivePlatform,
+            // All headless paths returned before this resolver is invoked.
+            effectiveHeadless: false,
+            hookPidHeader: requestHeaders[CLAWD_HOOK_PID_HEADER.toLowerCase()],
+            instanceGeneration: requestHeaders[CLAWD_PROCESS_INSTANCE_HEADER.toLowerCase()],
+          });
+          if (!assessment.eligible || typeof resolveWindowsProcessMetadata !== "function") {
+            return codexSessionOptions;
+          }
+
+          let result;
+          try {
+            result = resolveWindowsProcessMetadata({
+              agentId: "codex",
+              hookPid: assessment.hookPid,
+              preferAgentPid: isCodexDesktopOriginator(legacyCodexSessionOptions.codexOriginator),
+            });
+          } catch {
+            result = {
+              status: "unavailable",
+              reason: "resolver-threw",
+              sourcePid: null,
+              agentPid: null,
+              pidChain: null,
+              editor: null,
+            };
+          }
+
+          if (assessment.mode === "shadow") {
+            const candidateMetadata = processMetadataForState(result);
+            const legacyMetadata = {
+              sourcePid: legacyCodexSessionOptions.sourcePid || null,
+              agentPid: legacyCodexSessionOptions.agentPid || null,
+              pidChain: legacyCodexSessionOptions.pidChain || null,
+              editor: legacyCodexSessionOptions.editor || null,
+            };
+            const record = {
+              channel: "permission",
+              agentId: "codex",
+              event: "PermissionRequest",
+              status: result && result.status || "unavailable",
+              reason: result && result.reason || "resolver-unavailable",
+              comparisonClass: result && result.comparisonClass || null,
+              agentSeenBeforeFailure: result && result.agentSeenBeforeFailure === true,
+              failureStage: result && result.failureStage || null,
+              errorKind: result && result.errorKind || null,
+              depth: result && result.depth || 0,
+              durationMs: result && result.durationMs || 0,
+              cacheSource: requestHeaders[CLAWD_LEGACY_PROCESS_CACHE_HEADER.toLowerCase()] || null,
+              rawEditor: result && result.rawEditor || null,
+              effectiveEditor: candidateMetadata.editor,
+              legacyMetadata,
+              candidateMetadata,
+              comparison: buildShadowComparison(legacyMetadata, result),
+            };
+            if (typeof recordWindowsProcessChainShadow === "function") {
+              try { recordWindowsProcessChainShadow(record); } catch {}
+            } else if (typeof ctx.debugLog === "function") {
+              const safeShadowRecord = sanitizeShadowRecord(record);
+              if (safeShadowRecord) ctx.debugLog(`win-chain-shadow ${JSON.stringify(safeShadowRecord)}`);
+            }
+            return codexSessionOptions;
+          }
+
+          if (assessment.mode === "b1a-authoritative") {
+            const metadata = processMetadataForState(result);
+            codexSessionOptions = {
+              ...legacyCodexSessionOptions,
+              sourcePid: metadata.sourcePid,
+              agentPid: metadata.agentPid,
+              pidChain: metadata.pidChain,
+              editor: metadata.editor,
+              replaceProcessMetadata: true,
+            };
+          }
+          return codexSessionOptions;
+        };
 
         if (ctx.doNotDisturb) {
           recordRequestHookEvent.droppedByDnd();
@@ -736,6 +898,7 @@ function handlePermissionPost(req, res, options) {
         }
 
         if (!shouldInterceptCodexPermission(ctx)) {
+          codexSessionOptions = resolveCodexSessionProcessMetadata();
           const nativeSessionOptions = { ...codexSessionOptions };
           if (shouldMuteCodexNativeNotificationSound(ctx)) {
             nativeSessionOptions.muteNotificationSound = true;
@@ -757,6 +920,8 @@ function handlePermissionPost(req, res, options) {
           sendCodexPermissionNoDecision(res);
           return;
         }
+
+        codexSessionOptions = resolveCodexSessionProcessMetadata();
 
         const permEntry = {
           res,
@@ -1082,6 +1247,143 @@ function handlePermissionPost(req, res, options) {
         return;
       }
 
+      // ── DeepSeek Harness branch ──
+      // Blocking HTTP. The in-process DSH plugin awaits this response inside
+      // approval/request. A 204 means no Clawd decision; the plugin calls
+      // next() so DSH's downstream web answerer remains authoritative.
+      if (agentId === "deepseek-harness") {
+        const toolName = typeof data.tool_name === "string" && data.tool_name.trim()
+          ? data.tool_name.trim()
+          : "unknown";
+        const interaction = classifyPermissionInteraction({
+          agentId: "deepseek-harness",
+          eventKind: "permission",
+          toolName,
+        });
+        const sessionIdentity = resolvePermissionSession(data.session_id, "deepseek-harness:default");
+        const sessionId = sessionIdentity.sessionId;
+
+        // ask_user_question is intentionally DSH-native. This guard is
+        // defense-in-depth for stale/foreign bridge builds that still POST it.
+        if (
+          interaction.intent === INTERACTION_INTENT.HUMAN_QUESTION
+          || interaction.intent !== INTERACTION_INTENT.TOOL_APPROVAL
+        ) {
+          recordRequestHookEvent.droppedUnsupported();
+          ctx.permLog(`dsh unsupported interaction -> native fallback (tool=${toolName})`);
+          sendDshPermissionNoDecision(res);
+          return;
+        }
+
+        if (ctx.doNotDisturb) {
+          recordRequestHookEvent.droppedByDnd();
+          ctx.permLog(`dsh DND -> no decision, native fallback (tool=${toolName})`);
+          sendDshPermissionNoDecision(res);
+          return;
+        }
+        if (isHeadlessPermissionRequest(ctx, sessionId, data, agentId)) {
+          recordRequestHookEvent.accepted();
+          ctx.permLog(`dsh headless session=${sessionId} -> no decision, native fallback`);
+          sendDshPermissionNoDecision(res);
+          return;
+        }
+        if (typeof ctx.isAgentEnabled === "function" && !ctx.isAgentEnabled(agentId)) {
+          recordRequestHookEvent.droppedByDisabled();
+          sendDshPermissionNoDecision(res);
+          return;
+        }
+
+        const agentGateOff = typeof ctx.isAgentPermissionsEnabled === "function"
+          && !ctx.isAgentPermissionsEnabled(agentId);
+        // ApprovalRequest intentionally does not expose tool arguments. Ignore
+        // any foreign/stale bridge payload that tries to supply them. The
+        // public human-readable reason is bounded again at this trust boundary
+        // and is display-only; it never participates in automation/fingerprints.
+        const rawInput = {};
+        const reason = normalizeDshReason(data.reason);
+        const toolInput = reason ? { description: reason } : {};
+        const toolUseId = normalizeHookToolUseId(
+          data.tool_use_id ?? data.toolUseId ?? data.toolUseID
+        );
+        const toolInputFingerprint = buildToolInputFingerprint(rawInput);
+        const sessionOptions = {
+          ...buildDshPermissionSessionOptions(data),
+          sessionAutomationIdentity,
+          ...trustedSessionFields(sessionIdentity),
+        };
+
+        if (shouldBypassDshBubble(ctx)) {
+          recordRequestHookEvent.accepted();
+          if (!agentGateOff && !arePermissionBubblesEnabled(ctx)) {
+            const remoteOnlyResult = tryRemoteOnlyApproval(ctx, {
+              res,
+              sessionId,
+              toolName,
+              toolInput,
+              toolUseId,
+              toolInputFingerprint,
+              agentId,
+              suggestions: [],
+              interaction,
+              sessionAutomationIdentity,
+              isDsh: true,
+              ...sessionOptions,
+            });
+            if (remoteOnlyResult.handled) return;
+          }
+          ctx.permLog(`dsh ${agentGateOff ? "agent gate" : "local bubble"} disabled -> native fallback`);
+          sendDshPermissionNoDecision(res);
+          return;
+        }
+
+        const permEntry = {
+          res,
+          abortHandler: null,
+          suggestions: [],
+          sessionId,
+          ...sessionOptions,
+          bubble: null,
+          hideTimer: null,
+          toolName,
+          toolInput,
+          toolUseId,
+          toolInputFingerprint,
+          resolvedSuggestion: null,
+          createdAt: Date.now(),
+          interaction,
+          sessionAutomationIdentity,
+          isDsh: true,
+          agentId,
+        };
+        const abortHandler = () => {
+          if (res.writableFinished) return;
+          ctx.permLog("dsh abortHandler fired");
+          ctx.resolvePermissionEntry(permEntry, "no-decision", "Client disconnected");
+        };
+        permEntry.abortHandler = abortHandler;
+        res.on("close", abortHandler);
+        addPendingPermission(ctx, permEntry);
+        ctx.updateSession(sessionId, "notification", "PermissionRequest", sessionOptions);
+        recordRequestHookEvent.accepted();
+        try {
+          ctx.showPermissionBubble(permEntry);
+        } catch (bubbleErr) {
+          ctx.permLog(`dsh bubble failed: ${bubbleErr && bubbleErr.message} -> native fallback`);
+          removePendingPermission(ctx, permEntry, "dsh-bubble-failed");
+          if (permEntry.abortHandler) res.removeListener("close", permEntry.abortHandler);
+          if (permEntry.autoCloseTimer) clearTimeout(permEntry.autoCloseTimer);
+          if (permEntry.hideTimer) clearTimeout(permEntry.hideTimer);
+          if (permEntry.bubble && !permEntry.bubble.isDestroyed()) {
+            try { permEntry.bubble.destroy(); } catch {}
+          }
+          permEntry.bubble = null;
+          sendDshPermissionNoDecision(res);
+          return;
+        }
+        startRemoteApproval(ctx, permEntry);
+        return;
+      }
+
       // ── Hermes Agent branch ──
       // Blocking HTTP. Fallback is 204 (no-decision) so the Hermes plugin
       // returns None and the tool executes via Hermes's native flow.
@@ -1269,6 +1571,22 @@ function handlePermissionPost(req, res, options) {
           permEntry.bubble = null;
           sendHermesPermissionNoDecision(res);
         }
+        return;
+      }
+
+      // The remaining branch is the shared Claude Code / CodeBuddy-style
+      // blocking permission transport. Registry capabilities are the routing
+      // authority: a known state-only agent must never inherit this path just
+      // because it has a valid agent_id. Pi and Antigravity are intentionally
+      // handled above because their stale-client compatibility responses are
+      // agent-specific; every other non-approving agent gets a neutral 204.
+      const registeredAgent = getAgent(agentId);
+      if (!registeredAgent
+        || !registeredAgent.capabilities
+        || registeredAgent.capabilities.permissionApproval !== true) {
+        recordRequestHookEvent.droppedUnsupported();
+        ctx.permLog(`${agentId} has no permission-approval capability -> no decision`);
+        sendGenericPermissionNoDecision(res);
         return;
       }
 
@@ -1552,7 +1870,9 @@ module.exports = {
   sendCopilotPermissionNoDecision,
   sendPiPermissionAllow,
   sendAntigravityPermissionNoDecision,
+  sendDshPermissionNoDecision,
   sendHermesPermissionNoDecision,
+  shouldBypassDshBubble,
   shouldBypassHermesBubble,
   handlePermissionPost,
 };

@@ -12,6 +12,8 @@ const _defaultTheme = themeLoader.loadTheme("clawd");
 const _calicoTheme = themeLoader.loadTheme("calico");
 const { createTranslator } = require("../src/i18n");
 const { makeSessionKey } = require("../src/session-key");
+const { isSessionInProgress } = require("../src/state-session-snapshot");
+const { countLiveSubagents } = require("../src/state-visual-resolver");
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -107,6 +109,9 @@ function update(api, o = {}) {
       sessionAutomationIdentity: o.sessionAutomationIdentity ?? null,
       subagentId: o.subagentId ?? null,
       subagentType: o.subagentType ?? null,
+      subagentLifecycleSource: o.subagentLifecycleSource ?? null,
+      sessionStartSource: o.sessionStartSource ?? null,
+      replaceProcessMetadata: o.replaceProcessMetadata === true,
     },
   );
 }
@@ -219,6 +224,7 @@ function rawSession(state, opts = {}) {
     recentEvents: opts.recentEvents || [],
     pidReachable: opts.pidReachable ?? false,
     resumeState: opts.resumeState || null,
+    ...(opts.subagentTracker ? { subagentTracker: opts.subagentTracker } : {}),
   };
 }
 
@@ -304,6 +310,30 @@ describe("restoreSessionFromLease()", () => {
     });
     assert.strictEqual(api.sessions.has(sessionId), false);
     assert.strictEqual(api.sessions.size, 1);
+  });
+
+  it("uses a recovered juggling lease as a visual floor and replaces it on fresh identity", () => {
+    api = require("../src/state")(makeCtx({ processKill: () => true }));
+    assert.strictEqual(api.restoreSessionFromLease(lease({ state: "juggling" })), true);
+    const sessionId = makeSessionKey({ profileId: "local", rawSessionId: "claude-real-session" });
+    assert.strictEqual(api.sessions.get(sessionId).subagentTracker.recoveredFloor, true);
+    assert.strictEqual(api.getSvgOverride("juggling"), "clawd-headphones-groove.svg");
+
+    update(api, {
+      id: sessionId,
+      state: "juggling",
+      event: "SubagentStart",
+      subagentId: "child-a",
+      subagentLifecycleSource: "native",
+      sourcePid: process.pid,
+      agentPid: process.pid,
+      profileId: "local",
+      rawSessionId: "claude-real-session",
+    });
+    const tracker = api.sessions.get(sessionId).subagentTracker;
+    assert.strictEqual(tracker.recoveredFloor, false);
+    assert.deepStrictEqual([...tracker.confirmedIds], ["child-a"]);
+    assert.strictEqual(api.getSvgOverride("juggling"), "clawd-headphones-groove.svg");
   });
 
   it("never overwrites a session that arrived from a real hook first", () => {
@@ -617,6 +647,411 @@ describe("working sub-animations", () => {
 
   it("idle → follow SVG", () => {
     assert.strictEqual(api.getSvgOverride("idle"), "clawd-idle-follow.svg");
+  });
+});
+
+// #862 — the tier above counts juggling SESSIONS, but the docs promise tiering
+// by live SUBAGENT count, and one session can host several. That gap had zero
+// coverage, so these drive the real event entry point rather than seeding
+// api.sessions directly.
+describe("#862 juggling tier counts subagents, not sessions", () => {
+  let api;
+  beforeEach(() => { api = require("../src/state")(makeCtx()); });
+  afterEach(() => { api.cleanup(); });
+
+  const GROOVE = "clawd-headphones-groove.svg";
+  const JUGGLE = "clawd-working-juggling.svg";
+  const TYPING = "clawd-working-typing.svg";
+
+  function start(id = "s1", child = "child-1") {
+    update(api, {
+      id,
+      state: "juggling",
+      event: "SubagentStart",
+      subagentId: child,
+      subagentLifecycleSource: "native",
+    });
+  }
+  function stop(id = "s1", child = "child-1") {
+    update(api, {
+      id,
+      state: "working",
+      event: "SubagentStop",
+      subagentId: child,
+      subagentLifecycleSource: "native",
+    });
+  }
+  function anonymousStart(id = "s1", agentId = "cursor-agent") {
+    update(api, { id, agentId, state: "juggling", event: "subagentStart" });
+  }
+  function anonymousStop(id = "s1", agentId = "cursor-agent") {
+    update(api, { id, agentId, state: "working", event: "subagentStop" });
+  }
+  function work(id = "s1") { update(api, { id, state: "working", event: "PreToolUse" }); }
+  function shown() { return api.getSvgOverride(api.resolveDisplayState()); }
+
+  it("one session with 1 subagent → headphones groove", () => {
+    work(); start();
+    assert.strictEqual(shown(), GROOVE);
+  });
+
+  it("one session with 2 subagents → three-ball juggling", () => {
+    work(); start("s1", "child-a"); start("s1", "child-b");
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+    assert.strictEqual(shown(), JUGGLE);
+  });
+
+  it("holds juggling when one of two subagents stops", () => {
+    work(); start("s1", "child-a"); start("s1", "child-b"); stop("s1", "child-a");
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+    assert.strictEqual(shown(), GROOVE);
+  });
+
+  it("restores working only after the last subagent stops", () => {
+    work(); start("s1", "child-a"); start("s1", "child-b");
+    stop("s1", "child-a"); stop("s1", "child-b");
+    assert.strictEqual(api.resolveDisplayState(), "working");
+    assert.strictEqual(shown(), TYPING);
+  });
+
+  it("a new run resets the count when stops were lost", () => {
+    work(); start("s1", "child-a"); start("s1", "child-b");
+    // agent crashed — both stops never arrive; session leaves juggling normally
+    update(api, { id: "s1", state: "attention", event: "Stop" });
+    work();
+    start("s1", "child-c");
+    assert.strictEqual(shown(), GROOVE, "stale count must not carry into the new run");
+  });
+
+  it("still escalates across two sessions with one subagent each", () => {
+    work("s1"); work("s2"); start("s1", "child-a"); start("s2", "child-b");
+    assert.strictEqual(shown(), JUGGLE);
+  });
+
+  it("excludes headless subagents from the visual tier", () => {
+    work("s1");
+    start("s1", "child-a");
+    update(api, {
+      id: "headless",
+      state: "juggling",
+      event: "SubagentStart",
+      subagentId: "child-hidden",
+      subagentLifecycleSource: "native",
+      headless: true,
+    });
+    assert.strictEqual(shown(), GROOVE);
+  });
+
+  it("deduplicates same-id starts and ignores duplicate/unknown stops", () => {
+    work();
+    start("s1", "child-a");
+    start("s1", "child-a");
+    assert.strictEqual(shown(), GROOVE);
+    start("s1", "child-b");
+    stop("s1", "unknown-child");
+    assert.strictEqual(shown(), JUGGLE);
+    stop("s1", "child-a");
+    stop("s1", "child-a");
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+    assert.strictEqual(shown(), GROOVE);
+  });
+
+  it("classifies nested Agent ids as originators, not the launched child", () => {
+    work();
+    start("s1", "parent-child");
+    update(api, {
+      id: "s1",
+      state: "juggling",
+      event: "SubagentStart",
+      subagentId: "parent-child",
+      subagentLifecycleSource: "synthetic-tool",
+      toolName: "Agent",
+    });
+    assert.strictEqual(shown(), GROOVE, "synthetic delivery must not invent a second child");
+    start("s1", "nested-child");
+    assert.strictEqual(shown(), JUGGLE);
+  });
+
+  it("bounds anonymous Cursor/Kimi lanes at one and restores on first stop", () => {
+    for (const [id, agentId] of [
+      ["cursor", "cursor-agent"],
+      ["kimi", "kimi-cli"],
+    ]) {
+      anonymousStart(id, agentId);
+      anonymousStart(id, agentId);
+      assert.strictEqual(api.sessions.get(id).subagentTracker.legacyFloor, true);
+      assert.strictEqual(api.sessions.get(id).subagentTracker.confirmedIds.size, 0);
+      anonymousStop(id, agentId);
+      assert.ok(!api.sessions.has(id));
+    }
+  });
+
+  it("matches the Desktop D0 Agent/native ordering without double counting", () => {
+    work();
+    update(api, {
+      id: "s1",
+      state: "juggling",
+      event: "SubagentStart",
+      subagentLifecycleSource: "synthetic-tool",
+      toolName: "Agent",
+    });
+    update(api, {
+      id: "s1",
+      state: "juggling",
+      event: "SubagentStart",
+      subagentLifecycleSource: "synthetic-tool",
+      toolName: "Agent",
+    });
+    assert.strictEqual(shown(), GROOVE, "anonymous observations remain a floor of one");
+
+    start("s1", "desktop-child-a");
+    start("s1", "desktop-child-b");
+    assert.strictEqual(shown(), JUGGLE);
+
+    stop("s1", "desktop-child-a");
+    assert.strictEqual(shown(), GROOVE);
+    stop("s1", "desktop-child-b");
+    assert.strictEqual(api.resolveDisplayState(), "working");
+
+    update(api, { id: "s1", state: "working", event: "PostToolUse", toolName: "Agent" });
+    assert.strictEqual(shown(), TYPING);
+  });
+
+  it("treats Reasonix's unmatched anonymous stop as inert", () => {
+    anonymousStop("reasonix-only-stop", "reasonix");
+    assert.strictEqual(api.sessions.has("reasonix-only-stop"), false);
+    assert.strictEqual(api.resolveDisplayState(), "idle");
+  });
+
+  it("keeps confirmed, anonymous, and recovered lanes independent across sessions", () => {
+    api.sessions.set("confirmed", rawSession("juggling", {
+      subagentTracker: {
+        confirmedIds: new Set(["child-a", "child-b"]),
+        legacyFloor: false,
+        recoveredFloor: false,
+      },
+    }));
+    api.sessions.set("anonymous", rawSession("juggling", {
+      subagentTracker: {
+        confirmedIds: new Set(),
+        legacyFloor: true,
+        recoveredFloor: false,
+      },
+    }));
+    api.sessions.set("recovered", rawSession("juggling", {
+      subagentTracker: {
+        confirmedIds: new Set(),
+        legacyFloor: false,
+        recoveredFloor: true,
+      },
+    }));
+    assert.strictEqual(countLiveSubagents(api.sessions), 4);
+  });
+
+  it("readmits a child when activity follows a vetoed SubagentStop", () => {
+    work();
+    start("s1", "child-a");
+    stop("s1", "child-a");
+    assert.strictEqual(api.resolveDisplayState(), "working");
+    update(api, {
+      id: "s1",
+      state: "working",
+      event: "PreToolUse",
+      subagentId: "child-a",
+      toolName: "Bash",
+    });
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+    assert.strictEqual(api.sessions.get("s1").subagentTracker.confirmedIds.has("child-a"), true);
+  });
+
+  it("keeps confirmed background children across a parent UserPromptSubmit", () => {
+    work();
+    start("s1", "child-a");
+    update(api, { id: "s1", state: "thinking", event: "UserPromptSubmit" });
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+    assert.strictEqual(api.sessions.get("s1").subagentTracker.confirmedIds.has("child-a"), true);
+  });
+
+  it("preserves confirmed children across compact/resume SessionStart events", () => {
+    work();
+    start("s1", "child-a");
+    update(api, {
+      id: "s1",
+      state: "thinking",
+      event: "SessionStart",
+      sessionStartSource: "compact",
+    });
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+    assert.deepStrictEqual(
+      [...api.sessions.get("s1").subagentTracker.confirmedIds],
+      ["child-a"]
+    );
+
+    update(api, {
+      id: "s1",
+      state: "thinking",
+      event: "SessionStart",
+      sessionStartSource: "resume",
+    });
+    assert.deepStrictEqual(
+      [...api.sessions.get("s1").subagentTracker.confirmedIds],
+      ["child-a"]
+    );
+  });
+
+  it("clears the tracker at a fresh startup/clear SessionStart boundary", () => {
+    work();
+    start("s1", "child-a");
+    update(api, {
+      id: "s1",
+      state: "idle",
+      event: "SessionStart",
+      sessionStartSource: "startup",
+    });
+    assert.strictEqual(api.resolveDisplayState(), "idle");
+    assert.strictEqual(api.sessions.get("s1").subagentTracker.confirmedIds.size, 0);
+
+    start("s1", "child-b");
+    update(api, {
+      id: "s1",
+      state: "idle",
+      event: "SessionStart",
+      sessionStartSource: "clear",
+    });
+    assert.strictEqual(api.resolveDisplayState(), "idle");
+    assert.strictEqual(api.sessions.get("s1").subagentTracker.confirmedIds.size, 0);
+  });
+
+  it("keeps one-shot presentation separate from the underlying juggling state", () => {
+    work();
+    start("s1", "child-a");
+    update(api, { id: "s1", state: "error", event: "PostToolUseFailure" });
+    assert.strictEqual(api.sessions.get("s1").state, "juggling");
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+  });
+
+  it("bounds a failed legacy synthetic Task until accepted main completion", () => {
+    work();
+    update(api, {
+      id: "s1",
+      state: "juggling",
+      event: "SubagentStart",
+      subagentLifecycleSource: "synthetic-task",
+      toolName: "Task",
+    });
+    update(api, { id: "s1", state: "error", event: "PostToolUseFailure", toolName: "Task" });
+    assert.strictEqual(api.sessions.get("s1").subagentTracker.legacyFloor, true);
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+
+    update(api, { id: "s1", state: "attention", event: "Stop" });
+    assert.strictEqual(api.sessions.get("s1").subagentTracker.legacyFloor, false);
+    assert.strictEqual(api.resolveDisplayState(), "idle");
+  });
+
+  it("subagent-scoped SessionEnd removes only the matching child", () => {
+    work();
+    start("s1", "child-a");
+    start("s1", "child-b");
+    update(api, {
+      id: "s1",
+      state: "sleeping",
+      event: "SessionEnd",
+      subagentId: "child-a",
+      subagentLifecycleSource: "native",
+    });
+    assert.ok(api.sessions.has("s1"));
+    assert.deepStrictEqual(
+      [...api.sessions.get("s1").subagentTracker.confirmedIds],
+      ["child-b"]
+    );
+    assert.strictEqual(api.resolveDisplayState(), "juggling");
+  });
+
+  it("drops tracker state with parent SessionEnd, dismiss, and agent disable", () => {
+    work();
+    start("s1", "child-a");
+    update(api, { id: "s1", state: "sleeping", event: "SessionEnd" });
+    assert.strictEqual(api.sessions.has("s1"), false);
+
+    work("dismissed");
+    start("dismissed", "child-b");
+    assert.strictEqual(api.dismissSession("dismissed"), true);
+    assert.strictEqual(api.sessions.has("dismissed"), false);
+
+    work("disabled");
+    start("disabled", "child-c");
+    assert.strictEqual(api.clearSessionsByAgent("claude-code"), 1);
+    assert.strictEqual(api.sessions.has("disabled"), false);
+  });
+});
+
+describe("#862 renderer tier timing", () => {
+  let api;
+  let changes;
+
+  beforeEach(() => {
+    mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"] });
+    changes = [];
+    api = require("../src/state")(makeCtx({
+      sendToRenderer: (channel, state, svg) => {
+        if (channel === "state-change") changes.push([state, svg]);
+      },
+    }));
+    api.applyState("working", "clawd-working-typing.svg");
+    changes.length = 0;
+    update(api, { id: "s1", state: "working", event: "PreToolUse" });
+  });
+
+  afterEach(() => {
+    api.cleanup();
+    mock.timers.reset();
+  });
+
+  function native(event, child, state) {
+    update(api, {
+      id: "s1",
+      state,
+      event,
+      subagentId: child,
+      subagentLifecycleSource: "native",
+    });
+  }
+
+  it("re-resolves 1→2→1 during the working min-display window", () => {
+    native("SubagentStart", "child-a", "juggling");
+    native("SubagentStart", "child-b", "juggling");
+    native("SubagentStop", "child-b", "working");
+    assert.deepStrictEqual(changes, [], "working should remain visible for its minimum duration");
+
+    mock.timers.tick(1000);
+    assert.deepStrictEqual(changes, [["juggling", "clawd-headphones-groove.svg"]],
+      "the delayed paint must use the live 1-child tier, not a stale queued 2+ asset");
+  });
+
+  it("updates the rendered asset as confirmed ids move 2→1→0", () => {
+    native("SubagentStart", "child-a", "juggling");
+    native("SubagentStart", "child-b", "juggling");
+    mock.timers.tick(1000);
+    assert.deepStrictEqual(changes.at(-1), ["juggling", "clawd-working-juggling.svg"]);
+
+    native("SubagentStop", "child-a", "working");
+    assert.deepStrictEqual(changes.at(-1), ["juggling", "clawd-headphones-groove.svg"]);
+
+    native("SubagentStop", "child-b", "working");
+    assert.deepStrictEqual(changes.at(-1), ["working", "clawd-working-typing.svg"]);
+  });
+
+  it("returns from a one-shot error to the live juggling tier", () => {
+    native("SubagentStart", "child-a", "juggling");
+    mock.timers.tick(1000);
+    changes.length = 0;
+
+    update(api, { id: "s1", state: "error", event: "PostToolUseFailure" });
+    assert.deepStrictEqual(changes.at(-1), ["error", "clawd-error.svg"]);
+    assert.strictEqual(api.sessions.get("s1").state, "juggling");
+
+    mock.timers.tick(5000);
+    assert.deepStrictEqual(changes.at(-1), ["juggling", "clawd-headphones-groove.svg"]);
   });
 });
 
@@ -956,9 +1391,64 @@ describe("cleanStaleSessions()", () => {
     api.sessions.set("s1", rawSession("working", {
       agentPid: 1000, sourcePid: 2000, pidReachable: true,
       updatedAt: Date.now() - 310000,
+      subagentTracker: {
+        confirmedIds: new Set(["child-a"]),
+        legacyFloor: true,
+        recoveredFloor: true,
+      },
     }));
     api.cleanStaleSessions();
-    assert.strictEqual(api.sessions.get("s1").state, "idle");
+    const session = api.sessions.get("s1");
+    assert.strictEqual(session.state, "idle");
+    assert.strictEqual(session.subagentTracker.confirmedIds.size, 0);
+    assert.strictEqual(session.subagentTracker.legacyFloor, false);
+    assert.strictEqual(session.subagentTracker.recoveredFloor, false);
+  });
+
+  it("keeps local OpenCode blocker-facing work active past the generic session cutoff", () => {
+    api = require("../src/state")(makeCtx({
+      processKill: makePidKill(new Set([1000, 2000])),
+      getStaleConfig: () => ({
+        sessionStaleMs: 600_000,
+        workingStaleMs: 300_000,
+      }),
+    }));
+    api.sessions.set("opencode:s1", rawSession("working", {
+      agentId: "opencode",
+      agentPid: 1000,
+      sourcePid: 2000,
+      pidReachable: true,
+      updatedAt: Date.now() - 600_001,
+    }));
+
+    api.cleanStaleSessions();
+
+    const active = api.sessions.get("opencode:s1");
+    assert.strictEqual(active.state, "working");
+    assert.strictEqual(isSessionInProgress(active), true);
+  });
+
+  it("genuine OpenCode session.idle completion still records normal Stop semantics", () => {
+    api = require("../src/state")(makeCtx({
+      processKill: makePidKill(new Set([1000, 2000])),
+    }));
+    api.updateSession("opencode:s1", "working", "PreToolUse", {
+      agentId: "opencode",
+      agentPid: 1000,
+      sourcePid: 2000,
+      cwd: "/tmp",
+    });
+    api.updateSession("opencode:s1", "attention", "Stop", {
+      agentId: "opencode",
+      agentPid: 1000,
+      sourcePid: 2000,
+      cwd: "/tmp",
+    });
+
+    const completed = api.sessions.get("opencode:s1");
+    assert.strictEqual(completed.state, "idle");
+    assert.strictEqual(completed.recentEvents.at(-1).event, "Stop");
+    assert.strictEqual(api.deriveSessionBadge(completed), "done");
   });
 
   it("pidReachable false + stale → delete", () => {
@@ -1191,6 +1681,100 @@ describe("updateSession()", () => {
       [321, 456],
       "PermissionRequest path must merge, not overwrite with null",
     );
+  });
+
+  it("authoritative state metadata replaces and clears every derived process field", () => {
+    update(api, {
+      id: "authoritative-state",
+      event: "SessionStart",
+      sourcePid: 100,
+      agentPid: 200,
+      pidChain: [100, 200],
+      editor: "code",
+      wtHwnd: "1234",
+      orcaPaneKey: "tab-1:leaf-1",
+    });
+
+    update(api, {
+      id: "authoritative-state",
+      event: "PreToolUse",
+      replaceProcessMetadata: true,
+      sourcePid: null,
+      agentPid: null,
+      pidChain: null,
+      editor: null,
+    });
+
+    const session = api.sessions.get("authoritative-state");
+    assert.strictEqual(session.sourcePid, null);
+    assert.strictEqual(session.agentPid, null);
+    assert.strictEqual(session.pidChain, null);
+    assert.strictEqual(session.editor, null);
+    assert.strictEqual(session.wtHwnd, null);
+    assert.strictEqual(session.orcaPaneKey, null);
+    assert.strictEqual(session.pidReachable, false);
+  });
+
+  it("authoritative Cursor clear preserves its adapter-owned editor fallback", () => {
+    update(api, {
+      id: "authoritative-cursor",
+      event: "SessionStart",
+      agentId: "cursor-agent",
+      sourcePid: 100,
+      agentPid: 200,
+      pidChain: [100, 200],
+      editor: "cursor",
+    });
+    update(api, {
+      id: "authoritative-cursor",
+      event: "PreToolUse",
+      agentId: "cursor-agent",
+      replaceProcessMetadata: true,
+      editor: "cursor",
+    });
+
+    const session = api.sessions.get("authoritative-cursor");
+    assert.strictEqual(session.sourcePid, null);
+    assert.strictEqual(session.agentPid, null);
+    assert.strictEqual(session.pidChain, null);
+    assert.strictEqual(session.editor, "cursor");
+  });
+
+  it("authoritative Codex PermissionRequest clears stale focus without creating an all-null ghost", () => {
+    const sid = "codex:authoritative-permission";
+    update(api, {
+      id: sid,
+      event: "PermissionRequest",
+      state: "notification",
+      agentId: "codex",
+      sourcePid: 456,
+      agentPid: 456,
+      pidChain: [321, 456],
+      wtHwnd: "9876",
+      orcaPaneKey: "tab-2:leaf-2",
+      replaceProcessMetadata: true,
+    });
+    update(api, {
+      id: sid,
+      event: "PermissionRequest",
+      state: "notification",
+      agentId: "codex",
+      replaceProcessMetadata: true,
+    });
+
+    const session = api.sessions.get(sid);
+    assert.strictEqual(session.sourcePid, null);
+    assert.strictEqual(session.agentPid, null);
+    assert.strictEqual(session.pidChain, null);
+    assert.strictEqual(session.wtHwnd, null);
+    assert.strictEqual(session.orcaPaneKey, null);
+    assert.strictEqual(session.pidReachable, false);
+
+    api.updateSession("codex:all-null-new", "notification", "PermissionRequest", {
+      agentId: "codex",
+      replaceProcessMetadata: true,
+    });
+    assert.strictEqual(api.sessions.has("codex:all-null-new"), false);
   });
 
   it("existing session_id → updates state and timestamp", () => {
@@ -2045,6 +2629,67 @@ describe("updateSession()", () => {
     assert.strictEqual(api.getCurrentState(), "idle");
   });
 
+  it("presents a later attention Stop when an earlier ID-less Stop only idled the session", () => {
+    const soundsPlayed = [];
+    const stateChanges = [];
+    api.cleanup();
+    ctx = makeCtx({
+      processKill: () => true,
+      playSound: (name) => soundsPlayed.push(name),
+      sendToRenderer: (channel, state) => {
+        if (channel === "state-change") stateChanges.push(state);
+      },
+    });
+    api = require("../src/state")(ctx);
+
+    update(api, {
+      id: "codex:s1",
+      state: "thinking",
+      event: "UserPromptSubmit",
+      agentId: "codex",
+    });
+    mock.timers.tick(1000);
+    stateChanges.length = 0;
+
+    // A terminal without identity may resolve idle because the server cannot
+    // associate it with the turn's tool ledger. It closes lifecycle state but
+    // has not presented completion UX yet.
+    update(api, {
+      id: "codex:s1",
+      state: "idle",
+      event: "Stop",
+      agentId: "codex",
+    });
+    assert.strictEqual(soundsPlayed.filter((name) => name === "complete").length, 0);
+    stateChanges.length = 0;
+
+    // The later ID-bearing Stop is authoritative and resolves attention. It
+    // must upgrade the existing completion tail and celebrate exactly once.
+    update(api, {
+      id: "codex:s1",
+      state: "attention",
+      event: "Stop",
+      agentId: "codex",
+    });
+    assert.strictEqual(soundsPlayed.filter((name) => name === "complete").length, 1);
+    assert.deepStrictEqual(stateChanges, ["attention"]);
+    const completionEvents = api.sessions.get("codex:s1").recentEvents.filter((entry) => entry.event === "Stop");
+    assert.strictEqual(completionEvents.length, 1);
+    assert.strictEqual(completionEvents[0].state, "attention");
+
+    mock.timers.tick(4000);
+    soundsPlayed.length = 0;
+    stateChanges.length = 0;
+    update(api, {
+      id: "codex:s1",
+      state: "attention",
+      event: "Stop",
+      agentId: "codex",
+    });
+    assert.strictEqual(soundsPlayed.filter((name) => name === "complete").length, 0);
+    assert.ok(!stateChanges.includes("attention"));
+  });
+
   it("Codex Stop followed by token_count and task_complete still auto-returns from attention", () => {
     const soundsPlayed = [];
     const stateChanges = [];
@@ -2467,6 +3112,56 @@ describe("updateSession()", () => {
     assert.strictEqual(reloaded.find((entry) => entry.host === "workbox").claudeQuota.group.claudeWeekly.usedPercent, 90);
   });
 
+  it("commits, flushes, and clears only local Kimi quota", () => {
+    const persistPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "clawd-kimi-state-")), "account-quota.json");
+    const localApi = require("../src/state")(makeCtx({
+      accountQuotaPersistPath: persistPath,
+      kimiQuotaCollectionEnabled: true,
+    }));
+    const resetAt = Date.now() + 3600000;
+    assert.deepStrictEqual(localApi.commitLocalKimiQuota({
+      kimiFiveHour: { usedPercent: 12, resetAt, capturedAt: Date.now() },
+      kimiWeekly: { usedPercent: 4, resetAt: resetAt + 86400000, capturedAt: Date.now() },
+    }), { accepted: true, persisted: true });
+    assert.strictEqual(
+      localApi.buildSessionSnapshot().accountQuota[0].kimiQuota.group.kimiFiveHour.usedPercent,
+      12
+    );
+    assert.deepStrictEqual(localApi.clearLocalKimiQuota(), { cleared: true, persisted: true });
+    assert.strictEqual(localApi.buildSessionSnapshot().accountQuota.length, 0);
+    localApi.cleanup();
+    assert.strictEqual(
+      require("../src/state-account-quota").createAccountQuotaStore({ persistPath }).snapshot().length,
+      0,
+      "the explicit disconnect boundary must survive restart"
+    );
+  });
+
+  it("cleans a persisted local Kimi cache on startup when collection is disabled", () => {
+    const persistPath = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "clawd-kimi-optout-")), "account-quota.json");
+    const { createAccountQuotaStore } = require("../src/state-account-quota");
+    const seed = createAccountQuotaStore({ persistPath });
+    const resetAt = Date.now() + 3600000;
+    seed.update(null, {
+      kimiQuota: { kimiFiveHour: { usedPercent: 18, resetAt } },
+      codexQuota: { codexWeekly: { usedPercent: 7, resetAt } },
+    });
+    seed.flush();
+
+    const localApi = require("../src/state")(makeCtx({
+      accountQuotaPersistPath: persistPath,
+      kimiQuotaCollectionEnabled: false,
+    }));
+    const local = localApi.buildSessionSnapshot().accountQuota.find((entry) => entry.host === null);
+    assert.strictEqual(local.kimiQuota, undefined);
+    assert.strictEqual(local.codexQuota.group.codexWeekly.usedPercent, 7);
+    localApi.cleanup();
+
+    const reloaded = createAccountQuotaStore({ persistPath }).snapshot()[0];
+    assert.strictEqual(reloaded.kimiQuota, undefined);
+    assert.strictEqual(reloaded.codexQuota.group.codexWeekly.usedPercent, 7);
+  });
+
   it("updateAccountQuota change-detects identical refreshes (no re-broadcast, no re-stamp)", () => {
     const broadcasts = [];
     const localApi = require("../src/state")(makeCtx({
@@ -2616,6 +3311,74 @@ describe("updateSession()", () => {
     assert.strictEqual(session.contextUsageOrigin, "claude-statusline");
   });
 
+  // #830 — opencode-family plugin reports context usage with source
+  // "opencode" and the opencode-statusline origin. Same telemetry authority
+  // contract as claude-statusline: metadata wins, but there is no transcript
+  // backfill channel, so a later opencode-statusline update simply replaces
+  // the window (no limit-merge rule like the claude-transcript case).
+  it("accepts opencode context metadata and keeps the opencode-statusline origin", () => {
+    update(api, { id: "opencode:s1", agentId: "opencode", state: "working" });
+    const session = api.sessions.get("opencode:s1");
+    session.updatedAt = 12345; // pin so a bump is detectable
+
+    const applied = api.updateSessionMetadata("opencode:s1", {
+      contextUsage: { used: 32000, limit: 128000, percent: 25, source: "opencode" },
+      contextUsageOrigin: "opencode-statusline",
+    });
+
+    assert.strictEqual(applied, true);
+    assert.strictEqual(session.updatedAt, 12345, "telemetry must not touch lifecycle freshness");
+    assert.deepStrictEqual(session.contextUsage, {
+      used: 32000,
+      limit: 128000,
+      percent: 25,
+      source: "opencode",
+    });
+    assert.strictEqual(session.contextUsageOrigin, "opencode-statusline");
+  });
+
+  it("keeps the opencode-statusline window authoritative over later opencode state events", () => {
+    update(api, { id: "opencode:s1", agentId: "opencode", state: "working" });
+    api.updateSessionMetadata("opencode:s1", {
+      contextUsage: { used: 32000, limit: 128000, percent: 25, source: "opencode" },
+      contextUsageOrigin: "opencode-statusline",
+    });
+    // Later lifecycle POSTs (which ride the same opencode-statusline origin,
+    // unlike the claude transcript path) replace the window wholesale.
+    update(api, {
+      id: "opencode:s1",
+      state: "thinking",
+      event: "UserPromptSubmit",
+      contextUsage: { used: 90000, limit: 200000, percent: 45, source: "opencode" },
+      contextUsageOrigin: "opencode-statusline",
+    });
+
+    const session = api.sessions.get("opencode:s1");
+    assert.deepStrictEqual(session.contextUsage, {
+      used: 90000,
+      limit: 200000,
+      percent: 45,
+      source: "opencode",
+    });
+    assert.strictEqual(session.contextUsageOrigin, "opencode-statusline");
+  });
+
+  it("discards unknown context usage sources for opencode-origin telemetry", () => {
+    update(api, { id: "opencode:s1", agentId: "opencode", state: "working" });
+    const applied = api.updateSessionMetadata("opencode:s1", {
+      contextUsage: { used: 1000, limit: 200000, percent: 1, source: "suspicious" },
+      contextUsageOrigin: "opencode-statusline",
+    });
+
+    assert.strictEqual(applied, true);
+    assert.deepStrictEqual(api.sessions.get("opencode:s1").contextUsage, {
+      used: 1000,
+      limit: 200000,
+      percent: 1,
+    });
+    assert.strictEqual(api.sessions.get("opencode:s1").contextUsageOrigin, "opencode-statusline");
+  });
+
   it("carries authority through a context-free rebuild before the next transcript update", () => {
     update(api, { id: "s1", state: "working" });
     api.updateSessionMetadata("s1", {
@@ -2753,11 +3516,59 @@ describe("updateSession()", () => {
     assert.strictEqual(session.updatedAt, 12345);
 
     session.metadataUpdatedAt = 777; // pin so a re-stamp is detectable
-    api.updateSessionMetadata("s1", {
+    const acceptedNoop = api.updateSessionMetadata("s1", {
       contextUsage: { used: 100, limit: 200000, percent: 0, source: "claude" },
       contextUsageOrigin: "claude-statusline",
     });
+    assert.strictEqual(acceptedNoop, true, "a valid identical refresh is accepted even without mutation");
     assert.strictEqual(session.metadataUpdatedAt, 777, "identical refresh must not re-stamp");
+  });
+
+  it("updateSessionMetadata stores a title without touching lifecycle state or telemetry stamp", () => {
+    update(api, { id: "s1", state: "working" });
+    const session = api.sessions.get("s1");
+    session.updatedAt = 12345; // pin so a bump is detectable
+    session.metadataUpdatedAt = 777; // pin so a re-stamp is detectable
+    const recentEventsBefore = JSON.stringify(session.recentEvents);
+
+    const applied = api.updateSessionMetadata("s1", { sessionTitle: "New Title" });
+
+    assert.strictEqual(applied, true);
+    assert.strictEqual(session.sessionTitle, "New Title");
+    // Lifecycle untouched: state, updatedAt, recent events all unchanged.
+    assert.strictEqual(session.state, "working");
+    assert.strictEqual(session.updatedAt, 12345);
+    assert.strictEqual(JSON.stringify(session.recentEvents), recentEventsBefore);
+    // Telemetry freshness must NOT be stamped by a rename (#841 review).
+    assert.strictEqual(session.metadataUpdatedAt, 777);
+    assert.strictEqual(session.contextUsage, null);
+    assert.strictEqual(session.contextUsageOrigin, null);
+  });
+
+  it("updateSessionMetadata treats a same/normalized-equivalent title as a no-op", () => {
+    update(api, { id: "s1", state: "working" });
+    api.updateSessionMetadata("s1", { sessionTitle: "Stable Title" });
+    const session = api.sessions.get("s1");
+    session.metadataUpdatedAt = 777;
+
+    // Same title -> no change, no re-stamp.
+    const appliedSame = api.updateSessionMetadata("s1", { sessionTitle: "Stable Title" });
+    assert.strictEqual(appliedSame, true);
+    assert.strictEqual(session.sessionTitle, "Stable Title");
+    assert.strictEqual(session.metadataUpdatedAt, 777);
+
+    // Normalized-equivalent title (extra whitespace/control chars) collapses
+    // to the stored title via normalizeTitle -> still a no-op, no re-stamp.
+    const appliedNormalized = api.updateSessionMetadata("s1", { sessionTitle: "  Stable\t Title  " });
+    assert.strictEqual(appliedNormalized, true);
+    assert.strictEqual(session.sessionTitle, "Stable Title");
+    assert.strictEqual(session.metadataUpdatedAt, 777);
+  });
+
+  it("updateSessionMetadata returns false for an unknown session on a title-only payload", () => {
+    const applied = api.updateSessionMetadata("ghost", { sessionTitle: "Ghost Title" });
+    assert.strictEqual(applied, false);
+    assert.strictEqual(api.sessions.has("ghost"), false);
   });
 
   it("lifecycle events carry metadataUpdatedAt forward with the telemetry they preserve", () => {
@@ -2967,7 +3778,9 @@ describe("buildSessionSnapshot", () => {
     // Icon URLs are absolute file:// paths (machine-dependent) — assert the
     // shape, then compare the rest exactly.
     const { quotaAgentIcons, ...rest } = snapshot;
-    assert.deepStrictEqual(Object.keys(quotaAgentIcons).sort(), ["antigravityQuota", "claudeQuota", "codexQuota"]);
+    assert.deepStrictEqual(Object.keys(quotaAgentIcons).sort(), [
+      "antigravityQuota", "claudeQuota", "codexQuota", "kimiQuota",
+    ]);
     assert.deepStrictEqual(rest, {
       sessions: [],
       groups: [],
@@ -2992,6 +3805,11 @@ describe("buildSessionSnapshot", () => {
       agentId: "claude-code",
       sessionTitle: "Fix login",
       recentEvents: [{ event: "PreToolUse", state: "working", at: 900 }],
+      subagentTracker: {
+        confirmedIds: new Set(["private-child-id"]),
+        legacyFloor: false,
+        recoveredFloor: false,
+      },
     }));
     api.sessions.set("latest-remote", rawSession("idle", {
       updatedAt: 3000,
@@ -3033,6 +3851,8 @@ describe("buildSessionSnapshot", () => {
       rawEvent: "PreToolUse",
       at: 900,
     });
+    assert.strictEqual(Object.hasOwn(oldWorking, "subagentTracker"), false,
+      "private child identities must not cross the Dashboard/HUD/mobile snapshot boundary");
 
     const latestRemote = snapshot.sessions.find((s) => s.id === "latest-remote");
     assert.strictEqual(latestRemote.headless, true);

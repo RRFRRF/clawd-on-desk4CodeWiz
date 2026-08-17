@@ -75,10 +75,12 @@ patch        starts at 100 and increments per fork release
 | fork version | upstream base |
 |---|---|
 | `0.14.100` | `v0.14.0` + 45 commits (`ce387b83`, merge of upstream PR #820) |
+| `0.15.100` | `v0.15.0` (`bca6a8d3`, upstream `main` as of 2026-08-17) |
 
 The upstream base is recorded as a commit, not just a tag, because forks are
 often cut from a point after the last release — `git describe` reports
-`v0.14.0-45-gce387b83` here.
+`v0.14.0-45-gce387b83` for the v0.14.100 base, and `v0.15.0` for the v0.15.100
+base.
 
 `0.14.0+codewiz.1`-style build metadata was rejected on purpose: SemVer ignores
 everything after `+` when comparing versions, so `electron-updater` would treat
