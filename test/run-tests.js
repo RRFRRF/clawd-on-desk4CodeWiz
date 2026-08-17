@@ -15,7 +15,13 @@ const PLATFORM_SKIPLIST = process.platform === "win32" ? [] : ["dsh-install-brid
 const files = readdirSync(testDir)
   .filter((name) => name.endsWith(".test.js") && !PLATFORM_SKIPLIST.includes(name))
   .sort()
-  .map((name) => path.join(testDir, name));
+  // Use paths relative to the repo root, not absolute ones: the test runner
+  // always spawns with the repo root as cwd (npm test), and on Windows the
+  // spawn of `node --test <files...>` hits ENAMETOOLONG once the full absolute
+  // paths of ~400 test files exceed the 32,767-char CreateProcessW limit —
+  // which the fork's longer repo name (clawd-on-desk4CodeWiz, doubled in the
+  // GitHub runner workspace path) already triggers.
+  .map((name) => path.join("test", name));
 
 if (files.length === 0) {
   console.error("No test/*.test.js files found.");
